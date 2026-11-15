@@ -21,5 +21,9 @@
         <main class="content-main"><%- body %></main>
       </div>
     </div>
+
+    <% if (user && (supportMode || user.subscriptionPlan === 'PREMIUM')) { %>
+      <a href="/ia/chat" class="ai-fab" aria-label="Abrir asistente IA">AI</a>
+    <% } %>
   </body>
 </html>

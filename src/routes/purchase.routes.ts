@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response, Router } from 'express';
 import { PurchaseController } from '../controllers/purchase.controller';
-import { requireAuth } from '../middlewares/auth.middleware';
+import { requireAuth, requireSubscriptionPlan } from '../middlewares/auth.middleware';
+import { SubscriptionPlan } from '../enums/subscription-plan.enum';
 import { requireRole } from '../middlewares/role.middleware';
 import { requirePermission } from '../middlewares/permission.middleware';
 import { createPurchaseValidator } from '../validators/purchase.validator';
@@ -10,13 +11,15 @@ import { UserRole } from '../enums/user-role.enum';
 const router = Router();
 const purchaseController = new PurchaseController();
 
+router.use(requireAuth, requireSubscriptionPlan(SubscriptionPlan.PREMIUM));
+
 router.get('/', requireAuth, requirePermission('compras:view'), (req, res, next) => purchaseController.list(req, res, next));
 router.get(
   '/nueva',
   requireAuth,
   requirePermission('compras:create'),
   requireRole(UserRole.ADMIN),
-  (req, res) => purchaseController.newForm(req, res),
+  (req, res, next) => purchaseController.newForm(req, res, next),
 );
 router.post(
   '/',

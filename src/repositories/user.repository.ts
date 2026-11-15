@@ -13,6 +13,8 @@ export class UserRepository {
           association: 'role',
           include: ['permissions'],
         },
+        'company',
+        'local',
       ],
     });
   }
@@ -21,15 +23,16 @@ export class UserRepository {
     await User.update({ lastLoginAt: new Date() }, { where: { id: userId } });
   }
 
-  async listWithRole(): Promise<User[]> {
+  async listWithRole(companyId: string): Promise<User[]> {
     return User.findAll({
-      include: ['role'],
+      where: { companyId },
+      include: ['role', 'local'],
       order: [['fullName', 'ASC']],
     });
   }
 
-  async findById(userId: string): Promise<User | null> {
-    return User.findByPk(userId, { include: ['role'] });
+  async findById(userId: string, companyId: string): Promise<User | null> {
+    return User.findOne({ where: { id: userId, companyId }, include: ['role'] });
   }
 
   async countAdmins(): Promise<number> {
@@ -44,7 +47,7 @@ export class UserRepository {
     });
   }
 
-  async updateSecurityProfile(userId: string, roleId: string, isActive: boolean): Promise<void> {
-    await User.update({ roleId, isActive }, { where: { id: userId } });
+  async updateSecurityProfile(userId: string, roleId: string, isActive: boolean, companyId: string): Promise<void> {
+    await User.update({ roleId, isActive }, { where: { id: userId, companyId } });
   }
 }

@@ -2,6 +2,8 @@
 
 Sistema web completo de gestión para restaurantes y negocios gastronómicos, desarrollado con **Express.js**, **TypeScript**, **PostgreSQL** y **EJS**.
 
+El alcance actual incluye registro de ventas por sucursal, control transaccional del stock y anulación por parte del administrador con reversión del movimiento. El precio unitario se ingresa al registrar cada venta; medios de pago, impuestos y facturación electrónica todavía no forman parte del flujo.
+
 ## Requisitos Previos
 
 Antes de comenzar, asegúrate de tener instalado:
@@ -20,7 +22,7 @@ Antes de comenzar, asegúrate de tener instalado:
 
 ```bash
 git clone <URL-DEL-REPOSITORIO>
-cd GastroCloude
+cd GastroCloud
 ```
 
 ### 2. Instalar dependencias
@@ -74,6 +76,66 @@ DEMO_EMPLOYEE_PASSWORD=Empleado123*
 ```
 
 **Nota:** Si no creas el archivo `.env`, la aplicación usará valores por defecto que funcionan con una instalación estándar de PostgreSQL.
+
+### 5. Migrar el alcance por empresa y sucursal
+
+Antes de iniciar una versión con datos existentes, realiza un respaldo y aplica la migración de PostgreSQL:
+
+```powershell
+psql -h localhost -U postgres -d gastrocloud -f scripts\migrations\001_tenant_scope.sql
+```
+
+La migración conserva los datos y asigna empresa/sucursal a los registros históricos cuando puede inferir un único propietario. Los productos y categorías ahora son propios de una sucursal; el precio de venta también pertenece al producto local. El stock inicial parte de cero por defecto; si se carga o corrige una cantidad desde el catálogo, queda registrado un movimiento de ajuste. Los registros históricos cuya sucursal no puede inferirse de forma inequívoca quedan con `local_id` vacío para revisión y no aparecen en los catálogos de sucursal. No los reasignes automáticamente: contrasta compras, ventas y movimientos antes de resolverlos.
+
+Al iniciar la aplicación se crean los roles GERENTE y CONTADOR para cada empresa existente y para las empresas registradas después. GERENTE puede administrar catálogo, usuarios y consultar reportes de su empresa; CONTADOR solo tiene acceso a reportes. La migración no se ejecuta automáticamente ni debe correrse sin verificar el respaldo y la base de destino.
+
+### Acceso de soporte GastroCloud
+
+El registro de empresas sigue siendo público y cada empresa administra su propio personal. La empresa operadora de GastroCloud solo se usa para soporte; sus cuentas autorizadas acceden a empresas clientes en modo consulta desde `/soporte`. Se registran ingresos, salidas, consultas e intentos de modificación en **Actividad de soporte**, accesible para las empresas incluso con el plan Freemium. No se registran cuerpos de formularios ni parámetros de consulta. Si no se puede guardar la auditoría, se bloquea el acceso.
+
+Para una base existente, realiza un respaldo y aplica también:
+
+```powershell
+psql -h localhost -U postgres -d gastrocloud -v ON_ERROR_STOP=1 -f scripts\migrations\002_support_access.sql
+```
+
+La migración no concede acceso global automáticamente. Un administrador de la base debe identificar y verificar explícitamente los UUID de la empresa operadora y su primer usuario administrador de GC. En `psql`, reemplaza ambos marcadores y ejecuta:
+
+```sql
+BEGIN;
+UPDATE company SET is_support_operator = true
+WHERE id = '<uuid-empresa-gc>' AND is_active = true
+RETURNING id;
+
+INSERT INTO support_account (user_id, can_manage_support)
+SELECT u.id, true FROM "user" AS u
+JOIN "local" AS l ON l.id = u.local_id AND l.company_id = u.company_id AND l.is_active = true
+WHERE u.id = '<uuid-admin-gc>' AND u.company_id = '<uuid-empresa-gc>' AND u.is_active = true
+RETURNING user_id;
+```
+
+Confirma que cada sentencia devolvió exactamente una fila y que corresponden a las identidades verificadas. Solo entonces ejecuta `COMMIT;`; de lo contrario, ejecuta `ROLLBACK;`. Las cuentas ordinarias de la empresa operadora no pueden iniciar sesión sin una fila de soporte. Solo el administrador de GC podrá crear cuentas de soporte adicionales desde el panel.
+
+En producción, las cuentas de soporte necesitan una contraseña de al menos 12 caracteres y hasta 72 bytes; si al iniciar sesión la contraseña existente no cumple, la aplicación exige cambiarla antes de acceder. En desarrollo no se exige cambiar una contraseña existente para la demostración. Las cuentas de soporte nuevas requieren igualmente una contraseña de al menos 12 caracteres. El panel de inicio de sesión no muestra contraseñas de demostración. Las solicitudes de soporte que cambian el contexto o administran cuentas requieren un encabezado `Origin` del mismo origen; el proxy de despliegue debe conservar correctamente el protocolo y el host.
+
+### Baja y pago de prueba
+
+Un administrador de una empresa cliente puede darla de baja en **Mi empresa**, confirmando con su contraseña. Se bloquea el acceso de sus usuarios, incluidas las sesiones existentes en su próxima solicitud, sin borrar sus datos. GC conserva el acceso de soporte en modo consulta.
+
+Para una base existente, realiza un respaldo y aplica también:
+
+```powershell
+psql -h localhost -U postgres -d gastrocloud -v ON_ERROR_STOP=1 -f scripts\migrations\003_premium_expiration.sql
+```
+
+La demostración de **Mi plan** está disponible únicamente en desarrollo y usa un pago único de prueba de $1 ARS. Para configurarla:
+
+1. Crea una aplicación en [Mercado Pago Developers](https://www.mercadopago.com.ar/developers/panel/app). En **Credenciales**, selecciona el entorno **Prueba** y copia el Access Token de prueba. Mercado Pago usa el prefijo `APP_USR` también en credenciales de prueba: verifica el entorno en el panel, no el prefijo.
+2. Coloca el token exclusivamente en tu `.env` local como `MERCADOPAGO_TEST_ACCESS_TOKEN` y reinicia la aplicación. Nunca lo compartas ni lo agregues al repositorio.
+3. Usa una [cuenta y tarjetas de prueba](https://www.mercadopago.com.ar/developers/es/docs/checkout-pro-preferences/integration-test/test-purchases). Inicia sesión en una empresa cliente como administrador, abre **Mi plan** y pulsa **Abrir pago de prueba**.
+4. Después de completar el checkout de prueba, vuelve manualmente a GastroCloud, actualiza **Mi plan** y pulsa **Verificar pago**. Mercado Pago no admite `localhost` como URL de retorno automático.
+
+Solo se acepta un pago de prueba aprobado, de $1 ARS, de la empresa y preferencia correspondientes; el mismo pago no puede acreditarse dos veces. Premium dura 30 días y vuelve a Freemium al vencer o si el estado de la suscripción deja de estar activo. No hay renovación automática ni integración de pagos reales. Los Premium existentes sin fecha de vencimiento se conservan sin vencimiento.
 
 ## Ejecutar la Aplicación
 

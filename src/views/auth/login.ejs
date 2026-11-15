@@ -54,20 +54,14 @@
         <button type="submit" class="btn btn-light w-100">Entrar al home</button>
       </form>
 
+      <div class="mt-3 text-center">
+        <a href="/auth/register">Crear una empresa nueva</a>
+      </div>
+
       <% if (error) { %>
         <div class="alert alert-danger mt-3 mb-0" role="alert"><%= error %></div>
       <% } %>
 
-      <% if (demoAccounts && demoAccounts.length) { %>
-        <div class="panel-card mt-3">
-          <p class="mb-2"><strong>Accesos demo</strong></p>
-          <ul class="small mb-0 ps-3">
-            <% demoAccounts.forEach((account) => { %>
-              <li><strong><%= account.role %></strong>: <%= account.username %> / <%= account.password %></li>
-            <% }) %>
-          </ul>
-        </div>
-      <% } %>
     </section>
   </body>
 </html>

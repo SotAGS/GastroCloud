@@ -1,0 +1,15 @@
+<%- include('../layouts/app-shell', {
+  title: 'Mi empresa',
+  body: `
+    <section class="panel-card">
+      <h2>Dar de baja la empresa</h2>
+      <p>Se bloqueará el acceso a todos los usuarios de la empresa. Los datos se conservan y GastroCloud podrá consultarlos para soporte.</p>
+      <p>Para volver a habilitar la empresa será necesaria la intervención de GastroCloud.</p>
+      <form method="post" action="/empresa/baja" class="login-form">
+        <label>Tu contraseña <input class="form-control" type="password" name="password" required /></label>
+        <label>Escribe DAR DE BAJA para confirmar <input class="form-control" name="confirmation" required /></label>
+        <button type="submit" class="btn btn-danger">Dar de baja la empresa</button>
+      </form>
+    </section>
+  `
+}) %>

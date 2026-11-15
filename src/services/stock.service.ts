@@ -3,6 +3,7 @@ import { InventoryMovementType, InventoryOriginType } from '../enums/inventory-m
 import { PurchaseDetail } from '../models';
 import { StockRepository } from '../repositories/stock.repository';
 import { InventoryMovementRepository } from '../repositories/inventory-movement.repository';
+import { TenantScope } from '../utils/tenant-scope.util';
 
 export class StockService {
   private readonly stockRepository = new StockRepository();
@@ -12,12 +13,13 @@ export class StockService {
     purchaseId: string,
     details: PurchaseDetail[],
     actorUserId: string,
+    localId: string,
     transaction: Transaction,
   ): Promise<void> {
     for (const detail of details) {
-      let stock = await this.stockRepository.findByProductId(detail.productId, transaction);
+      let stock = await this.stockRepository.findByProductId(detail.productId, localId, transaction);
       if (!stock) {
-        stock = await this.stockRepository.createInitial(detail.productId, transaction);
+        stock = await this.stockRepository.createInitial(detail.productId, localId, transaction);
       }
 
       const previousQuantity = Number(stock.currentQuantity);
@@ -45,7 +47,7 @@ export class StockService {
     }
   }
 
-  async listCurrentStock() {
-    return this.stockRepository.listAll();
+  async listCurrentStock(scope: TenantScope) {
+    return this.stockRepository.listAll(scope);
   }
 }

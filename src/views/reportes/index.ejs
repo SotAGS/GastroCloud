@@ -1,0 +1,49 @@
+<%
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+}[character]));
+%>
+<%- include('../layouts/app-shell', {
+  title: 'Reportes',
+  body: `
+    <section class="panel-card mb-3">
+      <h2 class="section-title mb-3">Reportes de la empresa</h2>
+      <div class="dashboard-grid">
+        <article class="stat-card"><h3>Ventas de hoy</h3><p>$ ${report.todaySales.toFixed(2)}</p></article>
+        <article class="stat-card"><h3>Ventas del mes</h3><p>$ ${report.monthSales.toFixed(2)}</p></article>
+        <article class="stat-card"><h3>Compras recibidas este mes</h3><p>$ ${report.monthPurchases.toFixed(2)}</p></article>
+        <article class="stat-card"><h3>Movimientos registrados</h3><p>${report.movementCount}</p></article>
+      </div>
+    </section>
+    <section class="dashboard-grid mb-3">
+      <article class="panel-card">
+        <h3 class="section-title h5">Ventas por sucursal (mes actual)</h3>
+        <div class="table-responsive"><table class="table table-dark table-hover">
+          <thead><tr><th>Sucursal</th><th>Ventas</th><th>Cantidad</th></tr></thead>
+          <tbody>${report.salesByLocal.map((row) => `<tr><td>${escapeHtml(row.name)}</td><td>$ ${row.total.toFixed(2)}</td><td>${row.count}</td></tr>`).join('')}</tbody>
+        </table></div>
+      </article>
+      <article class="panel-card">
+        <h3 class="section-title h5">Ventas por mes</h3>
+        <div class="table-responsive"><table class="table table-dark table-hover">
+          <thead><tr><th>Mes</th><th>Total</th><th>Operaciones</th></tr></thead>
+          <tbody>${report.monthlySales.map((row) => `<tr><td>${escapeHtml(row.month)}</td><td>$ ${row.total.toFixed(2)}</td><td>${row.count}</td></tr>`).join('')}</tbody>
+        </table></div>
+      </article>
+    </section>
+    <section class="panel-card mb-3">
+      <h3 class="section-title h5">Stock bajo o en mínimo</h3>
+      <div class="table-responsive"><table class="table table-dark table-hover">
+        <thead><tr><th>Producto</th><th>Sucursal</th><th>Actual</th><th>Mínimo</th></tr></thead>
+        <tbody>${report.lowStock.map((stock) => `<tr><td>${escapeHtml(stock.product?.name || '—')}</td><td>${escapeHtml(stock.local?.name || '—')}</td><td>${Number(stock.currentQuantity).toFixed(3)} ${escapeHtml(stock.product?.unit || '')}</td><td>${Number(stock.minimumQuantity).toFixed(3)}</td></tr>`).join('') || '<tr><td colspan="4">No hay productos con stock bajo.</td></tr>'}</tbody>
+      </table></div>
+    </section>
+    <section class="panel-card">
+      <h3 class="section-title h5">Ventas recientes</h3>
+      <div class="table-responsive"><table class="table table-dark table-hover">
+        <thead><tr><th>Número</th><th>Sucursal</th><th>Fecha</th><th>Estado</th><th>Total</th></tr></thead>
+        <tbody>${report.recentSales.map((sale) => `<tr><td>${user?.permissions?.includes('ventas:view') || user?.role === 'ADMIN' ? `<a href="/ventas/${escapeHtml(sale.id)}">${escapeHtml(sale.saleNumber)}</a>` : escapeHtml(sale.saleNumber)}</td><td>${escapeHtml(sale.local?.name || '—')}</td><td>${escapeHtml(new Date(sale.soldAt).toLocaleString('es-AR'))}</td><td>${escapeHtml(sale.status)}</td><td>$ ${Number(sale.total).toFixed(2)}</td></tr>`).join('') || '<tr><td colspan="5">Todavía no hay ventas.</td></tr>'}</tbody>
+      </table></div>
+    </section>
+  `
+}) %>

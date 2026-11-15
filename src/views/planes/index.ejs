@@ -1,0 +1,30 @@
+<%
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+}[character]));
+%>
+<%- include('../layouts/app-shell', {
+  title: 'Mi plan',
+  body: `
+    <section class="panel-card mb-3">
+      <h2>Plan de la empresa</h2>
+      <p>Plan actual: <strong>${escapeHtml(user?.subscriptionPlan || 'FREEMIUM')}</strong></p>
+      ${premiumExpiresAt && user?.subscriptionPlan === 'PREMIUM' ? `<p>Premium hasta: ${escapeHtml(new Date(premiumExpiresAt).toLocaleString('es-AR'))}</p>` : ''}
+      <p>Demostración: pago único de prueba de $1 ARS por 30 días de Premium. No uses credenciales ni medios de pago reales.</p>
+      ${confirmed ? '<p class="alert alert-success">El pago de prueba fue verificado.</p>' : ''}
+      ${configured ? `
+        <form method="post" action="/planes/pagos" target="_blank">
+          <button type="submit" class="btn btn-light">Abrir pago de prueba</button>
+        </form>
+        <p>Después de completar el pago en Mercado Pago, vuelve aquí, actualiza la página y pulsa «Verificar pago».</p>
+      ` : '<p>Configura MERCADOPAGO_TEST_ACCESS_TOKEN con una credencial de prueba en el archivo .env y reinicia la aplicación.</p>'}
+    </section>
+    <section class="panel-card">
+      <h3>Pagos de prueba</h3>
+      <div class="table-responsive"><table class="table table-dark table-hover">
+        <thead><tr><th>Creado</th><th>Estado</th><th>Acciones</th></tr></thead>
+        <tbody>${attempts.map((attempt) => `<tr><td>${escapeHtml(new Date(attempt.createdAt).toLocaleString('es-AR'))}</td><td>${escapeHtml(attempt.status)}</td><td>${attempt.status === 'PENDING' ? `<a href="${escapeHtml(attempt.checkoutUrl)}" target="_blank" rel="noopener noreferrer">Abrir pago de prueba</a> <form class="d-inline" method="post" action="/planes/pagos/${escapeHtml(attempt.id)}/confirmar"><button class="btn btn-sm btn-outline-light" type="submit">Verificar pago</button></form>` : '—'}</td></tr>`).join('') || '<tr><td colspan="3">Todavía no hay pagos de prueba.</td></tr>'}</tbody>
+      </table></div>
+    </section>
+  `
+}) %>

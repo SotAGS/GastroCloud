@@ -21,3 +21,13 @@ export interface CreatePurchaseDto {
 export interface ChangePurchaseStatusDto {
   status: PurchaseStatus;
 }
+
+export interface CreateSaleDetailDto {
+  productId: string;
+  quantity: number;
+  unitPrice?: number;
+}
+
+export interface CreateSaleDto {
+  details: CreateSaleDetailDto[];
+}

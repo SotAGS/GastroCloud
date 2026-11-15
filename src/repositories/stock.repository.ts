@@ -1,15 +1,17 @@
-import { Transaction } from 'sequelize';
+import { Op, Transaction } from 'sequelize';
 import { Stock } from '../models';
+import { TenantScope } from '../utils/tenant-scope.util';
 
 export class StockRepository {
-  async findByProductId(productId: string, transaction: Transaction): Promise<Stock | null> {
-    return Stock.findOne({ where: { productId }, transaction });
+  async findByProductId(productId: string, localId: string, transaction: Transaction): Promise<Stock | null> {
+    return Stock.findOne({ where: { productId, localId }, transaction, lock: transaction.LOCK.UPDATE });
   }
 
-  async createInitial(productId: string, transaction: Transaction): Promise<Stock> {
+  async createInitial(productId: string, localId: string, transaction: Transaction): Promise<Stock> {
     return Stock.create(
       {
         productId,
+        localId,
         currentQuantity: 0,
         minimumQuantity: 0,
         maximumQuantity: null,
@@ -22,7 +24,11 @@ export class StockRepository {
     await stock.save({ transaction });
   }
 
-  async listAll(): Promise<Stock[]> {
-    return Stock.findAll({ include: ['product'], order: [['updatedAt', 'DESC']] });
+  async listAll(scope: TenantScope): Promise<Stock[]> {
+    return Stock.findAll({
+      where: scope.localId ? { localId: scope.localId } : { localId: { [Op.ne]: null } },
+      include: [{ association: 'product', where: { companyId: scope.companyId }, required: true }],
+      order: [['updatedAt', 'DESC']],
+    });
   }
 }

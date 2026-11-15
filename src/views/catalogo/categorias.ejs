@@ -1,0 +1,46 @@
+<%
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+}[character]));
+const localOptions = (selectedId) => (locals || []).map((local) =>
+  `<option value="${escapeHtml(local.id)}" ${local.id === selectedId ? 'selected' : ''}>${escapeHtml(local.name)}</option>`
+).join('');
+%>
+<%- include('../layouts/app-shell', {
+  title: 'Categorías',
+  body: `
+    <section class="panel-card">
+      <div class="d-flex justify-content-between align-items-center mb-3"><h2 class="section-title">Categorías por sucursal</h2><a class="btn btn-sm btn-outline-light" href="/catalogo/productos">Productos</a></div>
+      <form method="post" action="/catalogo/categorias" class="row g-2 mb-4">
+        <div class="col-md-4"><label class="form-label">Sucursal</label><select class="form-select" name="localId" required>${localOptions(user?.localId || locals[0]?.id)}</select></div>
+        <div class="col-md-3"><label class="form-label">Nombre</label><input class="form-control" name="name" maxlength="80" required /></div>
+        <div class="col-md-4"><label class="form-label">Descripción</label><input class="form-control" name="description" maxlength="200" /></div>
+        <div class="col-md-1 d-flex align-items-end"><button class="btn btn-light" type="submit">Crear</button></div>
+      </form>
+      <div class="table-responsive"><table class="table table-dark table-hover align-middle">
+        <thead><tr><th>Categoría</th><th>Sucursal</th><th>Estado</th><th>Editar</th></tr></thead>
+        <tbody>${(categories || []).map((category) => {
+          const id = escapeHtml(category.id);
+          return `<tr>
+            <td>${escapeHtml(category.name)}</td><td>${escapeHtml(category.local?.name || '—')}</td>
+            <td><span class="status-pill">${category.isActive ? 'Activa' : 'Inactiva'}</span></td>
+            <td>
+              <details><summary class="btn btn-sm btn-outline-light">Editar</summary>
+                <form method="post" action="/catalogo/categorias/${id}" class="row g-2 mt-2">
+                  <input type="hidden" name="_method" value="PUT" />
+                  <div class="col-md-4"><select class="form-select" name="localId" required>${localOptions(category.localId)}</select></div>
+                  <div class="col-md-3"><input class="form-control" name="name" value="${escapeHtml(category.name)}" maxlength="80" required /></div>
+                  <div class="col-md-4"><input class="form-control" name="description" value="${escapeHtml(category.description || '')}" maxlength="200" /></div>
+                  <div class="col-md-1"><button class="btn btn-sm btn-light" type="submit">Guardar</button></div>
+                </form>
+              </details>
+              <form class="mt-2" method="post" action="/catalogo/categorias/${id}/estado">
+                <input type="hidden" name="_method" value="PATCH" /><input type="hidden" name="isActive" value="${category.isActive ? 'false' : 'true'}" />
+                <button class="btn btn-sm btn-outline-warning" type="submit">${category.isActive ? 'Desactivar' : 'Reactivar'}</button>
+              </form>
+            </td></tr>`;
+        }).join('')}</tbody>
+      </table></div>
+    </section>
+  `
+}) %>

@@ -1,12 +1,22 @@
+<%
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+}[character]));
+%>
 <%- include('../layouts/app-shell', {
   title: 'Home',
   body: `
     <section class="panel-card mb-3">
       <h2 class="section-title mb-2">Home operativo</h2>
-      <p class="mb-0">Bienvenido, ${user?.fullName || 'Usuario'}. Desde aqui puedes controlar compras, stock y seguridad de la plataforma.</p>
+      <p class="mb-0">Bienvenido, ${escapeHtml(user?.fullName || 'Usuario')}. Desde aqui puedes controlar compras, stock y seguridad de la plataforma.</p>
     </section>
 
     <section class="dashboard-grid mb-3">
+      <article class="stat-card">
+        <h3>Ventas</h3>
+        <p>Registra ventas y mantiene actualizado el stock de tu sucursal.</p>
+        <a href="/ventas" class="btn btn-sm btn-outline-light">Ir a ventas</a>
+      </article>
       <article class="stat-card">
         <h3>Compras</h3>
         <p>Visualiza ordenes y su estado en tiempo real.</p>
@@ -27,8 +37,8 @@
     <section class="panel-card">
       <h3 class="section-title mb-2">Resumen de sesion</h3>
       <div class="row g-2">
-        <div class="col-md-4"><span class="status-pill">Usuario: ${user?.fullName || '-'}</span></div>
-        <div class="col-md-4"><span class="status-pill">Rol: ${user?.role || '-'}</span></div>
+        <div class="col-md-4"><span class="status-pill">Usuario: ${escapeHtml(user?.fullName || '-')}</span></div>
+        <div class="col-md-4"><span class="status-pill">Rol: ${escapeHtml(user?.role || '-')}</span></div>
         <div class="col-md-4"><span class="status-pill">Estado: Activo</span></div>
       </div>
     </section>

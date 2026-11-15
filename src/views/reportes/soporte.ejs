@@ -1,0 +1,21 @@
+<%
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+}[character]));
+%>
+<%- include('../layouts/app-shell', {
+  title: 'Actividad de soporte',
+  body: `
+    <section class="panel-card">
+      <h2>Actividad de soporte GastroCloud</h2>
+      <p>Los ingresos, consultas e intentos de modificación quedan registrados. Las consultas son solicitudes, no necesariamente operaciones exitosas.</p>
+      <div class="table-responsive">
+        <table class="table table-dark table-hover">
+          <thead><tr><th>Fecha</th><th>Usuario</th><th>Tipo</th><th>Actividad</th><th>Método</th><th>Ruta</th></tr></thead>
+          <tbody>${activities.map((activity) => `<tr><td>${escapeHtml(new Date(activity.createdAt).toLocaleString('es-AR'))}</td><td>${escapeHtml(activity.userName)}</td><td>${escapeHtml(activity.actorType)}</td><td>${escapeHtml(activity.action)}</td><td>${escapeHtml(activity.method)}</td><td>${escapeHtml(activity.path)}</td></tr>`).join('') || '<tr><td colspan="6">Sin actividad registrada.</td></tr>'}</tbody>
+        </table>
+      </div>
+      <div>${page > 1 ? `<a href="/reportes/soporte?page=${page - 1}">Anterior</a>` : ''} <span>Página ${page}</span> ${hasNext ? `<a href="/reportes/soporte?page=${page + 1}">Siguiente</a>` : ''}</div>
+    </section>
+  `
+}) %>

@@ -6,6 +6,7 @@ const securityService = new SecurityService();
 export const requirePermission = (permission: string) => {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const roleName = req.session.user?.role;
+    const roleId = req.session.user?.roleId;
     const sessionPermissions = req.session.user?.permissions || [];
 
     if (!roleName) {
@@ -27,7 +28,7 @@ export const requirePermission = (permission: string) => {
       return;
     }
 
-    const hasPermission = await securityService.roleHasPermission(roleName, permission);
+    const hasPermission = roleId ? await securityService.roleHasPermission(roleId, permission) : false;
     if (!hasPermission) {
       res.status(403).render('partials/error-page', {
         user: req.session.user ?? null,

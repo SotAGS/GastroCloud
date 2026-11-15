@@ -1,8 +1,10 @@
 import bcrypt from 'bcrypt';
 import { Op } from 'sequelize';
-import { Role, RolePermission, User } from '../models';
+import { Role, RolePermission, User, Company, Local } from '../models';
 import { UserRepository } from '../repositories/user.repository';
 import { HttpError } from '../utils/http-error.util';
+import { SubscriptionPlan } from '../enums/subscription-plan.enum';
+import { UserRole } from '../enums/user-role.enum';
 
 interface UpdateUserSecurityPayload {
   roleId: string;
@@ -15,6 +17,8 @@ interface CreateUserPayload {
   email: string;
   password: string;
   roleId: string;
+  companyId?: string | null;
+  localId?: string | null;
   isActive: boolean;
 }
 
@@ -23,6 +27,7 @@ interface UpdateUserPayload {
   username: string;
   email: string;
   roleId: string;
+  localId: string;
   isActive: boolean;
   password?: string;
 }
@@ -43,10 +48,17 @@ interface UpdateRolePermissionsPayload {
 
 const DEFAULT_PERMISSIONS = [
   'dashboard:view',
+  'ventas:view',
+  'ventas:create',
   'compras:view',
   'compras:create',
   'compras:update-status',
   'stock:view',
+  'catalog:read',
+  'catalog:manage-products',
+  'catalog:manage-categories',
+  'catalog:manage-suppliers',
+  'reportes:view',
   'seguridad:view',
   'seguridad:manage-users',
   'seguridad:manage-roles',
@@ -61,23 +73,38 @@ export class SecurityService {
     return [...DEFAULT_PERMISSIONS];
   }
 
-  async securityDashboard() {
-    const users = await this.listUsers();
-    const roles = await this.listRoles();
+  async securityDashboard(companyId: string, actorRole: string = UserRole.ADMIN) {
+    const users = await this.listUsers(companyId);
+    const roles = await this.listRoles(companyId, actorRole !== UserRole.ADMIN);
+    const locals = await Local.findAll({ where: { companyId, isActive: true }, order: [['name', 'ASC']] });
+    const assignableRoles =
+      actorRole === UserRole.GERENTE
+        ? roles.filter(
+            (role) =>
+              (role.companyId === null && role.name === UserRole.EMPLEADO) ||
+              [UserRole.GERENTE, UserRole.CONTADOR].includes(role.name as UserRole),
+          )
+        : roles;
     return {
       users,
       roles,
+      assignableRoles,
+      locals,
+      canManageRoles: actorRole === UserRole.ADMIN,
       availablePermissions: SecurityService.getDefaultPermissions(),
     };
   }
 
-  async listUsers() {
-    const users = await this.userRepository.listWithRole();
+  async listUsers(companyId: string) {
+    const users = await this.userRepository.listWithRole(companyId);
     return users.map((user) => ({
       id: user.id,
       fullName: user.fullName,
       username: user.username,
       email: user.email,
+      companyId: user.companyId,
+      localId: user.localId,
+      localName: user.local?.name ?? null,
       isActive: user.isActive,
       roleId: user.roleId,
       roleName: user.role?.name ?? null,
@@ -85,14 +112,18 @@ export class SecurityService {
     }));
   }
 
-  async listRoles() {
+  async listRoles(companyId: string, excludeGlobalAdmin = false) {
     const roles = await Role.findAll({
+      where: {
+        [Op.or]: [{ companyId }, { companyId: null, name: excludeGlobalAdmin ? [UserRole.EMPLEADO] : [UserRole.ADMIN, UserRole.EMPLEADO] }],
+      },
       include: [{ model: RolePermission }],
       order: [['name', 'ASC']],
     });
 
     return roles.map((role) => ({
       id: role.id,
+      companyId: role.companyId,
       name: role.name,
       description: role.description,
       permissions: (role.permissions || [])
@@ -101,11 +132,35 @@ export class SecurityService {
     }));
   }
 
-  async createUser(payload: CreateUserPayload): Promise<void> {
+  async createUser(
+    payload: CreateUserPayload,
+    actor: { companyId: string | null; subscriptionPlan: string | null; role: string },
+  ): Promise<void> {
+    if (actor.subscriptionPlan !== SubscriptionPlan.PREMIUM) {
+      throw new HttpError(403, 'La creación de usuarios está reservada al plan Premium.');
+    }
+
+    const requestedCompanyId = payload.companyId ?? actor.companyId;
+    if (!actor.companyId || requestedCompanyId !== actor.companyId) {
+      throw new HttpError(403, 'No puedes crear usuarios fuera de tu empresa.');
+    }
+
+    const company = await Company.findByPk(requestedCompanyId);
+    if (!company) {
+      throw new HttpError(404, 'Empresa no encontrada.');
+    }
+
+    const local = payload.localId
+      ? await Local.findOne({ where: { id: payload.localId, companyId: company.id, isActive: true } })
+      : null;
+    if (!local) {
+      throw new HttpError(400, 'El local indicado no pertenece a la empresa actual.');
+    }
+
     await this.ensureUniqueUserFields(payload.username, payload.email);
 
     const role = await Role.findByPk(payload.roleId);
-    if (!role) {
+    if (!role || !this.canAssignRoleToCompany(role, company.id, actor.role)) {
       throw new HttpError(400, 'Rol invalido.');
     }
 
@@ -117,12 +172,14 @@ export class SecurityService {
       email: payload.email,
       passwordHash,
       roleId: payload.roleId,
+      companyId: company.id,
+      localId: local.id,
       isActive: payload.isActive,
     });
   }
 
-  async updateUser(userId: string, payload: UpdateUserPayload): Promise<void> {
-    const user = await this.userRepository.findById(userId);
+  async updateUser(userId: string, payload: UpdateUserPayload, companyId: string, actorRole: string = UserRole.ADMIN): Promise<void> {
+    const user = await this.userRepository.findById(userId, companyId);
     if (!user) {
       throw new HttpError(404, 'Usuario no encontrado.');
     }
@@ -130,17 +187,21 @@ export class SecurityService {
     await this.ensureUniqueUserFields(payload.username, payload.email, user.id);
 
     const role = await Role.findByPk(payload.roleId);
-    if (!role) {
+    if (!role || !this.canAssignRoleToCompany(role, companyId, actorRole, user.roleId)) {
       throw new HttpError(400, 'Rol invalido.');
     }
+    this.preventManagerAdminChange(actorRole, user.role?.name ?? null);
+    const local = await Local.findOne({ where: { id: payload.localId, companyId, isActive: true } });
+    if (!local) throw new HttpError(400, 'El local indicado no pertenece a la empresa actual.');
 
-    await this.guardLastAdminRule(user.id, user.role?.name ?? null, role.name, payload.isActive);
+    await this.guardLastAdminRule(user.id, user.companyId, user.role?.name ?? null, role.name, payload.isActive);
 
     const updateValues: Partial<User> & { passwordHash?: string } = {
       fullName: payload.fullName,
       username: payload.username,
       email: payload.email,
       roleId: payload.roleId,
+      localId: local.id,
       isActive: payload.isActive,
     };
 
@@ -148,58 +209,72 @@ export class SecurityService {
       updateValues.passwordHash = await bcrypt.hash(payload.password, 10);
     }
 
-    await User.update(updateValues, { where: { id: user.id } });
+    await User.update(updateValues, { where: { id: user.id, companyId } });
   }
 
-  async deleteUser(userId: string): Promise<void> {
-    const user = await this.userRepository.findById(userId);
+  async deleteUser(userId: string, companyId: string, actorRole: string = UserRole.ADMIN): Promise<void> {
+    const user = await this.userRepository.findById(userId, companyId);
     if (!user) {
       throw new HttpError(404, 'Usuario no encontrado.');
     }
+    this.preventManagerAdminChange(actorRole, user.role?.name ?? null);
 
-    await this.guardLastAdminRule(user.id, user.role?.name ?? null, null, false);
+    await this.guardLastAdminRule(user.id, user.companyId, user.role?.name ?? null, null, false);
     await user.destroy();
   }
 
-  async updateUserSecurity(userId: string, payload: UpdateUserSecurityPayload): Promise<void> {
-    const user = await this.userRepository.findById(userId);
+  async updateUserSecurity(
+    userId: string,
+    payload: UpdateUserSecurityPayload,
+    companyId: string,
+    actorRole: string = UserRole.ADMIN,
+  ): Promise<void> {
+    const user = await this.userRepository.findById(userId, companyId);
     if (!user) {
       throw new HttpError(404, 'Usuario no encontrado.');
     }
 
     const role = await Role.findByPk(payload.roleId);
-    if (!role) {
+    if (!role || !this.canAssignRoleToCompany(role, companyId, actorRole, user.roleId)) {
       throw new HttpError(400, 'Rol invalido.');
     }
+    this.preventManagerAdminChange(actorRole, user.role?.name ?? null);
 
-    await this.guardLastAdminRule(user.id, user.role?.name ?? null, role.name, payload.isActive);
-    await this.userRepository.updateSecurityProfile(user.id, role.id, payload.isActive);
+    await this.guardLastAdminRule(user.id, user.companyId, user.role?.name ?? null, role.name, payload.isActive);
+    await this.userRepository.updateSecurityProfile(user.id, role.id, payload.isActive, companyId);
   }
 
-  async createRole(payload: CreateRolePayload): Promise<void> {
+  async createRole(payload: CreateRolePayload, companyId: string): Promise<void> {
     const roleName = payload.name.trim().toUpperCase();
+    this.validateCustomRoleName(roleName);
 
-    const existing = await Role.findOne({ where: { name: roleName } });
+    const existing = await Role.findOne({ where: { name: roleName, companyId } });
     if (existing) {
       throw new HttpError(400, 'El rol ya existe.');
     }
 
     await Role.create({
+      companyId,
       name: roleName,
       description: payload.description?.trim() || null,
     });
   }
 
-  async updateRole(roleId: string, payload: UpdateRolePayload): Promise<void> {
-    const role = await Role.findByPk(roleId);
+  async updateRole(roleId: string, payload: UpdateRolePayload, companyId: string): Promise<void> {
+    const role = await Role.findOne({ where: { id: roleId, companyId } });
     if (!role) {
       throw new HttpError(404, 'Rol no encontrado.');
     }
+    if ([UserRole.GERENTE, UserRole.CONTADOR].includes(role.name as UserRole)) {
+      throw new HttpError(400, 'Los roles base de la empresa no se pueden renombrar.');
+    }
 
     const roleName = payload.name.trim().toUpperCase();
+    this.validateCustomRoleName(roleName);
     const duplicate = await Role.findOne({
       where: {
         name: roleName,
+        companyId,
         id: { [Op.ne]: role.id },
       },
     });
@@ -213,10 +288,13 @@ export class SecurityService {
     await role.save();
   }
 
-  async deleteRole(roleId: string): Promise<void> {
-    const role = await Role.findByPk(roleId, { include: [User] });
+  async deleteRole(roleId: string, companyId: string): Promise<void> {
+    const role = await Role.findOne({ where: { id: roleId, companyId }, include: [User] });
     if (!role) {
       throw new HttpError(404, 'Rol no encontrado.');
+    }
+    if ([UserRole.GERENTE, UserRole.CONTADOR].includes(role.name as UserRole)) {
+      throw new HttpError(400, 'Los roles base de la empresa no se pueden eliminar.');
     }
 
     if ((role.users || []).length > 0) {
@@ -227,11 +305,14 @@ export class SecurityService {
     await role.destroy();
   }
 
-  async updateRolePermissions(roleId: string, payload: UpdateRolePermissionsPayload): Promise<void> {
+  async updateRolePermissions(roleId: string, payload: UpdateRolePermissionsPayload, companyId: string): Promise<void> {
     // Reemplaza en bloque los permisos del rol, validando que todos pertenezcan al catalogo permitido.
-    const role = await Role.findByPk(roleId);
+    const role = await Role.findOne({ where: { id: roleId, companyId } });
     if (!role) {
       throw new HttpError(404, 'Rol no encontrado.');
+    }
+    if ([UserRole.GERENTE, UserRole.CONTADOR].includes(role.name as UserRole)) {
+      throw new HttpError(400, 'Los permisos de los roles base de la empresa no se pueden modificar.');
     }
 
     const permissions = Array.from(new Set(payload.permissions.map((permission) => permission.trim()).filter(Boolean)));
@@ -260,18 +341,18 @@ export class SecurityService {
     );
   }
 
-  async roleHasPermission(roleName: string, permission: string): Promise<boolean> {
-    if (roleName === 'ADMIN') {
+  async roleHasPermission(roleId: string, permission: string): Promise<boolean> {
+    const role = await Role.findByPk(roleId);
+    if (!role) {
+      return false;
+    }
+
+    if (role.name === UserRole.ADMIN && role.companyId === null) {
       return true;
     }
 
     const [module, action] = permission.split(':');
     if (!module || !action) {
-      return false;
-    }
-
-    const role = await Role.findOne({ where: { name: roleName } });
-    if (!role) {
       return false;
     }
 
@@ -313,8 +394,36 @@ export class SecurityService {
     throw new HttpError(400, 'El email ya esta en uso.');
   }
 
+  private canAssignRoleToCompany(
+    role: Role,
+    companyId: string,
+    actorRole: string,
+    currentRoleId?: string,
+  ): boolean {
+    if (role.companyId === null) {
+      return role.name === UserRole.EMPLEADO || (actorRole === UserRole.ADMIN && role.name === UserRole.ADMIN);
+    }
+    if (role.companyId !== companyId) return false;
+    return actorRole !== UserRole.GERENTE ||
+      [UserRole.GERENTE, UserRole.CONTADOR].includes(role.name as UserRole) ||
+      role.id === currentRoleId;
+  }
+
+  private preventManagerAdminChange(actorRole: string, targetRole: string | null): void {
+    if (actorRole === UserRole.GERENTE && targetRole === UserRole.ADMIN) {
+      throw new HttpError(403, 'Un gerente no puede modificar ni eliminar usuarios ADMIN.');
+    }
+  }
+
+  private validateCustomRoleName(roleName: string): void {
+    if ([UserRole.ADMIN, UserRole.EMPLEADO, UserRole.GERENTE, UserRole.CONTADOR].includes(roleName as UserRole)) {
+      throw new HttpError(400, 'Ese nombre está reservado para los roles base del sistema.');
+    }
+  }
+
   private async guardLastAdminRule(
     userId: string,
+    companyId: string | null,
     currentRoleName: string | null,
     nextRoleName: string | null,
     nextIsActive: boolean,
@@ -325,6 +434,7 @@ export class SecurityService {
     }
 
     const adminUsers = await User.findAll({
+      where: { companyId },
       include: [{ model: Role, where: { name: 'ADMIN' }, required: true }],
       paranoid: true,
     });
@@ -340,7 +450,7 @@ export class SecurityService {
     const adminWillRemainActive = nextIsActive;
 
     if (activeAdmins.length <= 1 && (!adminWillRemainAdmin || !adminWillRemainActive)) {
-      throw new HttpError(400, 'Debe existir al menos un ADMIN activo en el sistema.');
+      throw new HttpError(400, 'Debe existir al menos un ADMIN activo en la empresa.');
     }
   }
 }

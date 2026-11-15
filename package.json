@@ -1,5 +1,5 @@
 {
-  "name": "gastrocloude",
+  "name": "gastrocloud",
   "version": "1.0.0",
   "description": "GastroCloud - Sistema Web de Gestion Gastronomica",
   "main": "dist/server.js",

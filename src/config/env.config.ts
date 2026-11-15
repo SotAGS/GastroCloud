@@ -17,6 +17,11 @@ export const env = {
   demoEmployeeUsername: process.env.DEMO_EMPLOYEE_USERNAME ?? 'empleado',
   demoEmployeeEmail: process.env.DEMO_EMPLOYEE_EMAIL ?? 'empleado@gastrocloud.local',
   demoEmployeePassword: process.env.DEMO_EMPLOYEE_PASSWORD ?? 'Empleado123*',
+  ai: {
+    openAiApiKey: process.env.OPENAI_API_KEY ?? '',
+    openAiModel: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
+  },
+  mercadoPagoTestAccessToken: process.env.MERCADOPAGO_TEST_ACCESS_TOKEN ?? '',
   db: {
     host: process.env.DB_HOST ?? 'localhost',
     port: toNumber(process.env.DB_PORT, 5432),

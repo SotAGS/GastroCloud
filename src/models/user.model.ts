@@ -2,6 +2,8 @@ import { Table, Model, Column, DataType, ForeignKey, BelongsTo, HasMany } from '
 import { Role } from './role.model';
 import { Purchase } from './purchase.model';
 import { InventoryMovement } from './inventory-movement.model';
+import { Company } from './company.model';
+import { Local } from './local.model';
 
 @Table({ tableName: 'user', timestamps: true, paranoid: true })
 export class User extends Model {
@@ -11,6 +13,14 @@ export class User extends Model {
   @ForeignKey(() => Role)
   @Column({ type: DataType.UUID, allowNull: false })
   declare roleId: string;
+
+  @ForeignKey(() => Company)
+  @Column({ type: DataType.UUID, allowNull: true })
+  declare companyId: string | null;
+
+  @ForeignKey(() => Local)
+  @Column({ type: DataType.UUID, allowNull: true })
+  declare localId: string | null;
 
   @Column({ type: DataType.STRING(120), allowNull: false })
   declare fullName: string;
@@ -32,6 +42,12 @@ export class User extends Model {
 
   @BelongsTo(() => Role)
   declare role: Role;
+
+  @BelongsTo(() => Company)
+  declare company: Company;
+
+  @BelongsTo(() => Local)
+  declare local: Local;
 
   @HasMany(() => Purchase)
   declare purchases: Purchase[];

@@ -7,6 +7,7 @@ import { sessionMiddleware } from './config/session.config';
 import { errorHandler } from './middlewares/error.middleware';
 import { notFoundHandler } from './middlewares/not-found.middleware';
 import { BootstrapSecurityService } from './services/bootstrap-security.service';
+import { supportContext } from './middlewares/support.middleware';
 
 export const createApp = () => {
   const app = express();
@@ -18,10 +19,13 @@ export const createApp = () => {
   app.use(methodOverride('_method'));
   app.use(sessionMiddleware);
   app.use(express.static(path.join(process.cwd(), 'src', 'public')));
+  app.use(supportContext);
 
   app.use((req, res, next) => {
     res.locals.user = req.session.user ?? null;
     res.locals.demoAccounts = BootstrapSecurityService.getDemoAccounts();
+    res.locals.supportMode = Boolean(req.session.support?.targetCompanyId);
+    res.locals.supportCompanyName = res.locals.supportCompanyName ?? null;
     next();
   });
 

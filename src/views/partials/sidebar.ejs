@@ -3,15 +3,36 @@
     <div class="brand-mark">GC</div>
     <div>
       <p class="brand-title">GastroCloud</p>
-      <p class="brand-subtitle">Abastecimiento</p>
+      <p class="brand-subtitle"><%= user?.subscriptionPlan || 'PREMIUM' %></p>
     </div>
   </div>
   <nav class="menu-nav">
     <a href="/dashboard">Dashboard</a>
-    <a href="/compras">Compras</a>
+    <a href="/ventas">Ventas</a>
     <a href="/stock">Stock</a>
-    <% if (user?.role === 'ADMIN') { %>
+    <% if (supportMode || user?.subscriptionPlan === 'PREMIUM') { %>
+      <a href="/compras">Compras</a>
+      <a href="/ia/chat">Asistente IA</a>
+    <% } else { %>
+      <span class="text-light-emphasis small d-block px-3 py-2">Asistente IA requiere Premium</span>
+    <% } %>
+    <% if (user?.role === 'ADMIN' || user?.role === 'GERENTE') { %>
+      <a href="/catalogo/productos">Catálogo</a>
+    <% } %>
+    <% if ((supportMode || user?.subscriptionPlan === 'PREMIUM') && (user?.permissions?.includes('reportes:view') || ['ADMIN', 'GERENTE'].includes(user?.role))) { %>
+      <a href="/reportes">Reportes</a>
+    <% } %>
+    <% if (user?.role === 'ADMIN' || user?.permissions?.includes('reportes:view')) { %>
+      <a href="/reportes/soporte">Actividad de soporte</a>
+    <% } %>
+    <% if (['ADMIN', 'GERENTE'].includes(user?.role) && (supportMode || user?.subscriptionPlan === 'PREMIUM')) { %>
       <a href="/seguridad/usuarios">Seguridad y roles</a>
+    <% } else if (['ADMIN', 'GERENTE'].includes(user?.role)) { %>
+      <span class="text-light-emphasis small d-block px-3 py-2">Seguridad y roles requieren Premium</span>
+    <% } %>
+    <% if (user?.role === 'ADMIN' && !supportMode) { %>
+      <a href="/planes">Mi plan</a>
+      <a href="/empresa">Mi empresa</a>
     <% } %>
   </nav>
 </aside>

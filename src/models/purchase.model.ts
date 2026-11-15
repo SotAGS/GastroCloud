@@ -11,8 +11,14 @@ import { Supplier } from './supplier.model';
 import { User } from './user.model';
 import { PurchaseDetail } from './purchase-detail.model';
 import { PurchaseStatus } from '../enums/purchase-status.enum';
+import { Company } from './company.model';
+import { Local } from './local.model';
 
-@Table({ tableName: 'purchase', timestamps: true })
+@Table({
+  tableName: 'purchase',
+  timestamps: true,
+  indexes: [{ name: 'purchase_company_number_uq', unique: true, fields: ['company_id', 'purchase_number'] }],
+})
 export class Purchase extends Model {
   @Column({ type: DataType.UUID, defaultValue: DataType.UUIDV4, primaryKey: true })
   declare id: string;
@@ -25,7 +31,15 @@ export class Purchase extends Model {
   @Column({ type: DataType.UUID, allowNull: false })
   declare createdByUserId: string;
 
-  @Column({ type: DataType.STRING(30), allowNull: false, unique: true })
+  @ForeignKey(() => Company)
+  @Column({ type: DataType.UUID, allowNull: true })
+  declare companyId: string | null;
+
+  @ForeignKey(() => Local)
+  @Column({ type: DataType.UUID, allowNull: true })
+  declare localId: string | null;
+
+  @Column({ type: DataType.STRING(30), allowNull: false })
   declare purchaseNumber: string;
 
   @Column({ type: DataType.DATEONLY, allowNull: false })
@@ -51,6 +65,12 @@ export class Purchase extends Model {
 
   @BelongsTo(() => User)
   declare createdBy: User;
+
+  @BelongsTo(() => Company)
+  declare company: Company | null;
+
+  @BelongsTo(() => Local)
+  declare local: Local | null;
 
   @HasMany(() => PurchaseDetail)
   declare details: PurchaseDetail[];

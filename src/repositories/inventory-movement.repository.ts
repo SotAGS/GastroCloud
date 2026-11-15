@@ -1,5 +1,7 @@
 import { Transaction } from 'sequelize';
-import { InventoryMovement, Product } from '../models';
+import { InventoryMovement, Product, Stock } from '../models';
+import { TenantScope } from '../utils/tenant-scope.util';
+import { Op } from 'sequelize';
 
 interface CreateMovementInput {
   productId: string;
@@ -26,9 +28,12 @@ export class InventoryMovementRepository {
     );
   }
 
-  async listRecent(limit = 50): Promise<InventoryMovement[]> {
+  async listRecent(scope: TenantScope, limit = 50): Promise<InventoryMovement[]> {
     return InventoryMovement.findAll({
-      include: [{ model: Product }],
+      include: [
+        { model: Product, where: { companyId: scope.companyId }, required: true },
+        { model: Stock, where: scope.localId ? { localId: scope.localId } : { localId: { [Op.ne]: null } }, required: true },
+      ],
       order: [['movementDate', 'DESC']],
       limit,
     });

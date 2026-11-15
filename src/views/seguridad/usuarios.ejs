@@ -1,23 +1,29 @@
+<%
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+}[character]));
+const newUserRoles = typeof assignableRoles === 'undefined' ? roles : assignableRoles;
+%>
 <%- include('../layouts/app-shell', {
   title: 'Seguridad y roles',
   body: `
     <section class="panel-card">
       <div class="d-flex justify-content-between align-items-center mb-3">
         <h2 class="section-title">Seguridad: usuarios, roles y permisos</h2>
-        <span class="status-pill">Solo ADMIN</span>
+        <span class="status-pill">${canManageRoles ? 'Administración de roles' : 'Gestión de usuarios'}</span>
       </div>
 
       ${
         error
-          ? `<div class="alert alert-danger mb-3" role="alert">${error}</div>`
+          ? `<div class="alert alert-danger mb-3" role="alert">${escapeHtml(error)}</div>`
           : ''
       }
 
-      <div class="d-flex gap-2 flex-wrap mb-3">
+      ${canManageRoles ? `<div class="d-flex gap-2 flex-wrap mb-3">
         <form method="post" action="/seguridad/usuarios/empleado/reset-password">
           <button class="btn btn-sm btn-outline-light" type="submit">Reset clave empleado a empleado123</button>
         </form>
-      </div>
+      </div>` : ''}
 
       <h3 class="section-title h5 mb-2">Crear usuario</h3>
       <form method="post" action="/seguridad/usuarios" class="row g-2 mb-4">
@@ -35,9 +41,14 @@
         </div>
         <div class="col-md-2">
           <select class="form-select form-select-sm" name="roleId" required>
-            ${(roles || [])
-              .map((role) => `<option value="${role.id}">${role.name}</option>`)
+            ${(newUserRoles || roles || [])
+              .map((role) => `<option value="${escapeHtml(role.id)}">${escapeHtml(role.name)}</option>`)
               .join('')}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <select class="form-select form-select-sm" name="localId" required>
+            ${(locals || []).map((local) => `<option value="${escapeHtml(local.id)}" ${local.id === user?.localId ? 'selected' : ''}>${escapeHtml(local.name)}</option>`).join('')}
           </select>
         </div>
         <div class="col-md-2 d-flex align-items-center">
@@ -61,6 +72,7 @@
               <th>Usuario</th>
               <th>Email</th>
               <th>Rol</th>
+              <th>Sucursal</th>
               <th>Activo</th>
               <th>Ultimo login</th>
               <th>Acciones</th>
@@ -71,18 +83,25 @@
               .map(
                 (row) => `
                   <tr>
-                    <td><input class="form-control form-control-sm" name="fullName" value="${row.fullName}" form="update-user-${row.id}" required /></td>
-                    <td><input class="form-control form-control-sm" name="username" value="${row.username}" form="update-user-${row.id}" required /></td>
-                    <td><input class="form-control form-control-sm" type="email" name="email" value="${row.email}" form="update-user-${row.id}" required /></td>
+                    <td><input class="form-control form-control-sm" name="fullName" value="${escapeHtml(row.fullName)}" form="update-user-${escapeHtml(row.id)}" required ${!canManageRoles && row.roleName === 'ADMIN' ? 'disabled' : ''} /></td>
+                    <td><input class="form-control form-control-sm" name="username" value="${escapeHtml(row.username)}" form="update-user-${escapeHtml(row.id)}" required ${!canManageRoles && row.roleName === 'ADMIN' ? 'disabled' : ''} /></td>
+                    <td><input class="form-control form-control-sm" type="email" name="email" value="${escapeHtml(row.email)}" form="update-user-${escapeHtml(row.id)}" required ${!canManageRoles && row.roleName === 'ADMIN' ? 'disabled' : ''} /></td>
                     <td>
-                      <select name="roleId" class="form-select form-select-sm" aria-label="Rol usuario ${row.username}" form="update-user-${row.id}">
+                      <select name="roleId" class="form-select form-select-sm" aria-label="Rol usuario ${escapeHtml(row.username)}" form="update-user-${escapeHtml(row.id)}" ${!canManageRoles && row.roleName === 'ADMIN' ? 'disabled' : ''}>
                           ${(roles || [])
                             .map(
                               (role) =>
-                                `<option value="${role.id}" ${row.roleId === role.id ? 'selected' : ''}>${role.name}</option>`,
+                                `<option value="${escapeHtml(role.id)}" ${row.roleId === role.id ? 'selected' : ''}>${escapeHtml(role.name)}</option>`,
                             )
                             .join('')}
                       </select>
+                      </td>
+                      <td>
+                        <select name="localId" class="form-select form-select-sm" aria-label="Sucursal usuario ${escapeHtml(row.username)}" form="update-user-${escapeHtml(row.id)}" ${!canManageRoles && row.roleName === 'ADMIN' ? 'disabled' : ''}>
+                          ${(locals || [])
+                            .map((local) => `<option value="${escapeHtml(local.id)}" ${row.localId === local.id ? 'selected' : ''}>${escapeHtml(local.name)}</option>`)
+                            .join('')}
+                        </select>
                       </td>
                       <td>
                         <div class="form-check form-switch m-0">
@@ -91,22 +110,23 @@
                             type="checkbox"
                             name="isActive"
                             ${row.isActive ? 'checked' : ''}
-                            aria-label="Estado usuario ${row.username}"
-                          form="update-user-${row.id}"
+                            ${!canManageRoles && row.roleName === 'ADMIN' ? 'disabled' : ''}
+                            aria-label="Estado usuario ${escapeHtml(row.username)}"
+                          form="update-user-${escapeHtml(row.id)}"
                           />
                         </div>
                       </td>
-                      <td>${row.lastLoginAt ? new Date(row.lastLoginAt).toLocaleString('es-AR') : '-'}</td>
+                      <td>${row.lastLoginAt ? escapeHtml(new Date(row.lastLoginAt).toLocaleString('es-AR')) : '-'}</td>
                       <td>
                         <div class="d-flex gap-2">
-                        <input class="form-control form-control-sm" type="password" name="password" placeholder="Nueva clave (opcional)" form="update-user-${row.id}" />
-                        <form id="update-user-${row.id}" method="post" action="/seguridad/usuarios/${row.id}">
+                        <input class="form-control form-control-sm" type="password" name="password" placeholder="Nueva clave (opcional)" form="update-user-${escapeHtml(row.id)}" ${!canManageRoles && row.roleName === 'ADMIN' ? 'disabled' : ''} />
+                        <form id="update-user-${escapeHtml(row.id)}" method="post" action="/seguridad/usuarios/${escapeHtml(row.id)}">
                           <input type="hidden" name="_method" value="PUT" />
-                          <button class="btn btn-sm btn-outline-light" type="submit">Guardar</button>
+                          <button class="btn btn-sm btn-outline-light" type="submit" ${!canManageRoles && row.roleName === 'ADMIN' ? 'disabled' : ''}>Guardar</button>
                         </form>
-                        <form method="post" action="/seguridad/usuarios/${row.id}" onsubmit="return confirm('Eliminar usuario ${row.username}?');">
+                        <form method="post" action="/seguridad/usuarios/${escapeHtml(row.id)}" onsubmit="return confirm('¿Eliminar este usuario?');">
                           <input type="hidden" name="_method" value="DELETE" />
-                          <button class="btn btn-sm btn-outline-danger" type="submit">Eliminar</button>
+                          <button class="btn btn-sm btn-outline-danger" type="submit" ${!canManageRoles && row.roleName === 'ADMIN' ? 'disabled' : ''}>Eliminar</button>
                         </form>
                       </div>
                       </td>
@@ -118,7 +138,7 @@
         </table>
       </div>
 
-      <hr class="my-4" />
+      ${canManageRoles ? `<hr class="my-4" />
 
       <h3 class="section-title h5 mb-2">Roles</h3>
       <form method="post" action="/seguridad/roles" class="row g-2 mb-3">
@@ -149,15 +169,15 @@
                 (role) => `
                   <tr>
                     <td>
-                      <input class="form-control form-control-sm" name="name" value="${role.name}" form="update-role-${role.id}" required ${
-                          role.name === 'ADMIN' || role.name === 'EMPLEADO' ? 'readonly' : ''
+                      <input class="form-control form-control-sm" name="name" value="${escapeHtml(role.name)}" form="update-role-${escapeHtml(role.id)}" required ${
+                                          ['ADMIN', 'EMPLEADO', 'GERENTE', 'CONTADOR'].includes(role.name) ? 'readonly' : ''
                         } />
                     </td>
                     <td>
-                      <input class="form-control form-control-sm" name="description" value="${role.description || ''}" form="update-role-${role.id}" />
+                      <input class="form-control form-control-sm" name="description" value="${escapeHtml(role.description || '')}" form="update-role-${escapeHtml(role.id)}" />
                     </td>
                     <td>
-                      <form method="post" action="/seguridad/roles/${role.id}/permisos" id="permissions-role-${role.id}">
+                      <form method="post" action="/seguridad/roles/${escapeHtml(role.id)}/permisos" id="permissions-role-${escapeHtml(role.id)}">
                         <input type="hidden" name="_method" value="PATCH" />
                         <div class="permission-grid">
                           ${(availablePermissions || [])
@@ -170,29 +190,29 @@
                                     name="permissions[]"
                                     value="${permission}"
                                     ${role.permissions.includes(permission) ? 'checked' : ''}
-                                    ${role.name === 'ADMIN' ? 'disabled' : ''}
+                                    ${['ADMIN', 'GERENTE', 'CONTADOR'].includes(role.name) ? 'disabled' : ''}
                                   />
-                                  <span class="form-check-label small">${permission}</span>
+                                  <span class="form-check-label small">${escapeHtml(permission)}</span>
                                 </label>
                               `,
                             )
                             .join('')}
                         </div>
                         <button class="btn btn-sm btn-outline-light mt-2" type="submit" ${
-                          role.name === 'ADMIN' ? 'disabled' : ''
+                          ['ADMIN', 'GERENTE', 'CONTADOR'].includes(role.name) ? 'disabled' : ''
                         }>Guardar permisos</button>
                       </form>
                     </td>
                     <td>
                       <div class="d-flex gap-2">
-                        <form id="update-role-${role.id}" method="post" action="/seguridad/roles/${role.id}">
+                        <form id="update-role-${escapeHtml(role.id)}" method="post" action="/seguridad/roles/${escapeHtml(role.id)}">
                           <input type="hidden" name="_method" value="PUT" />
                           <button class="btn btn-sm btn-outline-light" type="submit">Guardar rol</button>
                         </form>
-                        <form method="post" action="/seguridad/roles/${role.id}" onsubmit="return confirm('Eliminar rol ${role.name}?');">
+                        <form method="post" action="/seguridad/roles/${escapeHtml(role.id)}" onsubmit="return confirm('¿Eliminar este rol?');">
                           <input type="hidden" name="_method" value="DELETE" />
                           <button class="btn btn-sm btn-outline-danger" type="submit" ${
-                            role.name === 'ADMIN' || role.name === 'EMPLEADO' ? 'disabled' : ''
+                            ['ADMIN', 'EMPLEADO', 'GERENTE', 'CONTADOR'].includes(role.name) ? 'disabled' : ''
                           }>Eliminar</button>
                         </form>
                       </div>
@@ -204,6 +224,7 @@
           </tbody>
         </table>
       </div>
+      ` : ''}
     </section>
   `
 }) %>

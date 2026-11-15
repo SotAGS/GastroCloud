@@ -3,6 +3,8 @@ import { env, isProduction } from './env.config';
 import { Role } from '../models/role.model';
 import { RolePermission } from '../models/role-permission.model';
 import { User } from '../models/user.model';
+import { Company } from '../models/company.model';
+import { Local } from '../models/local.model';
 import { Category } from '../models/category.model';
 import { Product } from '../models/product.model';
 import { Supplier } from '../models/supplier.model';
@@ -10,6 +12,11 @@ import { Purchase } from '../models/purchase.model';
 import { PurchaseDetail } from '../models/purchase-detail.model';
 import { Stock } from '../models/stock.model';
 import { InventoryMovement } from '../models/inventory-movement.model';
+import { Sale } from '../models/sale.model';
+import { SaleDetail } from '../models/sale-detail.model';
+import { SupportAccount } from '../models/support-account.model';
+import { SupportActivity } from '../models/support-activity.model';
+import { PaymentAttempt } from '../models/payment-attempt.model';
 
 export const sequelize = new Sequelize({
   dialect: 'postgres',
@@ -27,7 +34,25 @@ export const sequelize = new Sequelize({
         },
       }
     : {},
-  models: [Role, RolePermission, User, Category, Product, Supplier, Purchase, PurchaseDetail, Stock, InventoryMovement],
+  models: [
+    Role,
+    RolePermission,
+    Company,
+    Local,
+    User,
+    Category,
+    Product,
+    Supplier,
+    Purchase,
+    PurchaseDetail,
+    Stock,
+    InventoryMovement,
+    Sale,
+    SaleDetail,
+    SupportAccount,
+    SupportActivity,
+    PaymentAttempt,
+  ],
   define: {
     underscored: true,
     paranoid: false,

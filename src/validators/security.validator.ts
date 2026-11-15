@@ -13,6 +13,8 @@ export const createUserValidator = [
   body('email').trim().isEmail().withMessage('Email invalido.').normalizeEmail(),
   body('password').isLength({ min: 6 }).withMessage('Contrasena debe tener al menos 6 caracteres.'),
   body('roleId').trim().notEmpty().withMessage('Rol es obligatorio.'),
+  body('companyId').optional({ values: 'falsy' }).trim().notEmpty().withMessage('Empresa invalida.'),
+  body('localId').optional({ values: 'falsy' }).trim().notEmpty().withMessage('Local invalido.'),
   body('isActive').optional().isIn(['on']).withMessage('Estado invalido.'),
 ];
 
@@ -27,6 +29,7 @@ export const updateUserValidator = [
   body('email').trim().isEmail().withMessage('Email invalido.').normalizeEmail(),
   body('password').optional({ values: 'falsy' }).isLength({ min: 6 }).withMessage('Contrasena minima: 6.'),
   body('roleId').trim().notEmpty().withMessage('Rol es obligatorio.'),
+  body('localId').isUUID().withMessage('Sucursal invalida.'),
   body('isActive').optional().isIn(['on']).withMessage('Estado invalido.'),
 ];
 

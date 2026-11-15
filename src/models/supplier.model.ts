@@ -1,7 +1,16 @@
-import { Table, Model, Column, DataType, HasMany } from 'sequelize-typescript';
+import { Table, Model, Column, DataType, HasMany, ForeignKey, BelongsTo } from 'sequelize-typescript';
 import { Purchase } from './purchase.model';
+import { Company } from './company.model';
 
-@Table({ tableName: 'supplier', timestamps: true, paranoid: true })
+@Table({
+  tableName: 'supplier',
+  timestamps: true,
+  paranoid: true,
+  indexes: [
+    { name: 'supplier_company_name_normalized_uq', unique: true, fields: ['company_id', 'business_name_normalized'] },
+    { name: 'supplier_company_tax_id_uq', unique: true, fields: ['company_id', 'tax_id'] },
+  ],
+})
 export class Supplier extends Model {
   @Column({ type: DataType.UUID, defaultValue: DataType.UUIDV4, primaryKey: true })
   declare id: string;
@@ -9,10 +18,14 @@ export class Supplier extends Model {
   @Column({ type: DataType.STRING(150), allowNull: false })
   declare businessName: string;
 
-  @Column({ type: DataType.STRING(150), allowNull: false, unique: true })
+  @ForeignKey(() => Company)
+  @Column({ type: DataType.UUID, allowNull: true })
+  declare companyId: string | null;
+
+  @Column({ type: DataType.STRING(150), allowNull: false })
   declare businessNameNormalized: string;
 
-  @Column({ type: DataType.STRING(30), allowNull: true, unique: true })
+  @Column({ type: DataType.STRING(30), allowNull: true })
   declare taxId: string | null;
 
   @Column({ type: DataType.STRING(120), allowNull: true })
@@ -29,4 +42,7 @@ export class Supplier extends Model {
 
   @HasMany(() => Purchase)
   declare purchases: Purchase[];
+
+  @BelongsTo(() => Company)
+  declare company: Company | null;
 }

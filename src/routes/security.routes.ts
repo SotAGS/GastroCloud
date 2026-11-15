@@ -1,9 +1,10 @@
 import { NextFunction, Request, Response, Router } from 'express';
 import { SecurityController } from '../controllers/security.controller';
-import { requireAuth } from '../middlewares/auth.middleware';
+import { requireAuth, requireSubscriptionPlan } from '../middlewares/auth.middleware';
 import { requireRole } from '../middlewares/role.middleware';
 import { requirePermission } from '../middlewares/permission.middleware';
 import { UserRole } from '../enums/user-role.enum';
+import { SubscriptionPlan } from '../enums/subscription-plan.enum';
 import {
   createRoleValidator,
   createUserValidator,
@@ -17,22 +18,24 @@ import { handleValidation } from '../middlewares/validation.middleware';
 const router = Router();
 const securityController = new SecurityController();
 
+router.use(requireAuth, requireSubscriptionPlan(SubscriptionPlan.PREMIUM));
+
 router.get(
   '/',
   requireAuth,
-  requireRole(UserRole.ADMIN),
+  requireSubscriptionPlan(SubscriptionPlan.PREMIUM),
   requirePermission('seguridad:view'),
   (req, res, next) => securityController.dashboard(req, res, next),
 );
 
-router.get('/usuarios', requireAuth, requireRole(UserRole.ADMIN), (req, res) => {
+router.get('/usuarios', requireAuth, requirePermission('seguridad:view'), (req, res) => {
   res.redirect('/seguridad');
 });
 
 router.post(
   '/usuarios',
   requireAuth,
-  requireRole(UserRole.ADMIN),
+  requireSubscriptionPlan(SubscriptionPlan.PREMIUM),
   requirePermission('seguridad:manage-users'),
   createUserValidator,
   handleValidation,
@@ -42,21 +45,19 @@ router.post(
 router.put(
   '/usuarios/:id',
   requireAuth,
-  requireRole(UserRole.ADMIN),
   requirePermission('seguridad:manage-users'),
   updateUserValidator,
   handleValidation,
   (req: Request, res: Response, next: NextFunction) => securityController.updateUser(req, res, next),
 );
 
-router.delete('/usuarios/:id', requireAuth, requireRole(UserRole.ADMIN), requirePermission('seguridad:manage-users'), (req, res, next) =>
+router.delete('/usuarios/:id', requireAuth, requirePermission('seguridad:manage-users'), (req, res, next) =>
   securityController.deleteUser(req, res, next),
 );
 
 router.patch(
   '/usuarios/:id/seguridad',
   requireAuth,
-  requireRole(UserRole.ADMIN),
   requirePermission('seguridad:manage-users'),
   updateUserSecurityValidator,
   handleValidation,

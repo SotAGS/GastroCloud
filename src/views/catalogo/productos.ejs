@@ -1,0 +1,110 @@
+<%
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+}[character]));
+const localOptions = (selectedId) => (locals || []).map((local) =>
+  `<option value="${escapeHtml(local.id)}" ${local.id === selectedId ? 'selected' : ''}>${escapeHtml(local.name)}</option>`
+).join('');
+const categoryOptions = (localId, selectedId, activeOnly) => (categories || [])
+  .filter((category) => category.localId === localId && (!activeOnly || category.isActive))
+  .map((category) => `<option value="${escapeHtml(category.id)}" ${category.id === selectedId ? 'selected' : ''} ${!category.isActive ? 'disabled' : ''}>${escapeHtml(category.name)}${category.isActive ? '' : ' (inactiva)'}</option>`)
+  .join('');
+const activeCategoryOptions = (categories || []).filter((category) => category.isActive)
+  .map((category) => `<option value="${escapeHtml(category.id)}" data-local-id="${escapeHtml(category.localId)}">${escapeHtml(category.name)}</option>`)
+  .join('');
+%>
+<%- include('../layouts/app-shell', {
+  title: 'Productos',
+  body: `
+    <section class="panel-card mb-3">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="section-title">Catálogo por sucursal</h2>
+        <div class="d-flex gap-2">
+          <a class="btn btn-sm btn-outline-light" href="/catalogo/categorias">Categorías</a>
+          <a class="btn btn-sm btn-outline-light" href="/catalogo/proveedores">Proveedores</a>
+        </div>
+      </div>
+      <h3 class="section-title h5">Nuevo producto</h3>
+      ${
+        locals.length && categories.some((category) => category.isActive && locals.some((local) => local.id === category.localId))
+          ? `
+            <form method="post" action="/catalogo/productos" class="row g-2 align-items-end mb-4">
+              <div class="col-md-3"><label class="form-label">Sucursal</label><select class="form-select" name="localId" id="new-product-local" required>${localOptions(user?.localId || locals[0].id)}</select></div>
+              <div class="col-md-3"><label class="form-label">Categoría</label><select class="form-select" name="categoryId" id="new-product-category" required><option value="">Seleccionar</option>${activeCategoryOptions}</select></div>
+              <div class="col-md-3"><label class="form-label">Nombre</label><input class="form-control" name="name" maxlength="120" required /></div>
+              <div class="col-md-3"><label class="form-label">Código SKU</label><input class="form-control" name="sku" maxlength="40" /></div>
+              <div class="col-md-2"><label class="form-label">Unidad</label><input class="form-control" name="unit" value="unidad" maxlength="20" required /></div>
+              <div class="col-md-2"><label class="form-label">Precio de venta</label><input class="form-control" type="number" step="0.01" min="0" name="salePrice" value="0" required /></div>
+              <div class="col-md-2"><label class="form-label">Stock inicial</label><input class="form-control" type="number" step="0.001" min="0" name="initialQuantity" value="0" /></div>
+              <div class="col-md-6"><label class="form-label">Descripción</label><input class="form-control" name="description" maxlength="300" /></div>
+              <div class="col-12"><button class="btn btn-light" type="submit">Crear producto</button><small class="text-light-emphasis ms-2">El stock inicial se registra como movimiento.</small></div>
+            </form>
+          `
+          : '<p class="alert alert-info">Crea una categoría activa para poder agregar productos.</p>'
+      }
+      <div class="table-responsive">
+        <table class="table table-dark table-hover align-middle">
+          <thead><tr><th>Producto</th><th>Sucursal</th><th>Categoría</th><th>Precio</th><th>Stock</th><th>Estado</th><th>Acciones</th></tr></thead>
+          <tbody>
+            ${(products || []).map((product) => {
+              const stock = (product.stocks || []).find((item) => item.localId === product.localId);
+              const id = escapeHtml(product.id);
+              const productCategories = categoryOptions(product.localId, product.categoryId, false);
+              return `
+                <tr>
+                  <td>${escapeHtml(product.name)}<small class="d-block text-light-emphasis">${escapeHtml(product.sku || '')}</small></td>
+                  <td>${escapeHtml(product.local?.name || 'Sin asignación')}</td>
+                  <td>${escapeHtml(product.category?.name || '—')}</td>
+                  <td>$ ${Number(product.salePrice).toFixed(2)}</td>
+                  <td>${Number(stock?.currentQuantity || 0).toFixed(3)} ${escapeHtml(product.unit)}</td>
+                  <td><span class="status-pill">${product.isActive ? 'Activo' : 'Inactivo'}</span></td>
+                  <td>
+                    <details>
+                      <summary class="btn btn-sm btn-outline-light">Editar</summary>
+                      <form method="post" action="/catalogo/productos/${id}" class="row g-2 mt-2">
+                        <input type="hidden" name="_method" value="PUT" />
+                        <input type="hidden" name="localId" value="${escapeHtml(product.localId)}" />
+                        <div class="col-md-4"><label class="form-label">Categoría</label><select class="form-select" name="categoryId" required>${productCategories}</select></div>
+                        <div class="col-md-4"><label class="form-label">Nombre</label><input class="form-control" name="name" value="${escapeHtml(product.name)}" maxlength="120" required /></div>
+                        <div class="col-md-4"><label class="form-label">Código SKU</label><input class="form-control" name="sku" value="${escapeHtml(product.sku || '')}" maxlength="40" /></div>
+                        <div class="col-md-3"><label class="form-label">Unidad</label><input class="form-control" name="unit" value="${escapeHtml(product.unit)}" maxlength="20" required /></div>
+                        <div class="col-md-3"><label class="form-label">Precio</label><input class="form-control" type="number" step="0.01" min="0" name="salePrice" value="${Number(product.salePrice).toFixed(2)}" required /></div>
+                        <div class="col-md-3"><label class="form-label">Stock actual</label><input class="form-control" type="number" step="0.001" min="0" name="currentQuantity" value="${Number(stock?.currentQuantity || 0).toFixed(3)}" required /></div>
+                        <div class="col-md-3"><label class="form-label">Descripción</label><input class="form-control" name="description" value="${escapeHtml(product.description || '')}" maxlength="300" /></div>
+                        <div class="col-12"><button class="btn btn-sm btn-light" type="submit">Guardar</button></div>
+                      </form>
+                    </details>
+                    <div class="d-flex gap-1 mt-2">
+                      <form method="post" action="/catalogo/productos/${id}/estado">
+                        <input type="hidden" name="_method" value="PATCH" /><input type="hidden" name="isActive" value="${product.isActive ? 'false' : 'true'}" />
+                        <button class="btn btn-sm btn-outline-warning" type="submit">${product.isActive ? 'Desactivar' : 'Reactivar'}</button>
+                      </form>
+                      <form method="post" action="/catalogo/productos/${id}" onsubmit="return confirm('Solo se puede borrar definitivamente sin historial de ventas, compras ni movimientos. ¿Continuar?');">
+                        <input type="hidden" name="_method" value="DELETE" />
+                        <button class="btn btn-sm btn-outline-danger" type="submit">Borrar definitivo</button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    <script>
+      (function () {
+        var locals = document.getElementById('new-product-local');
+        var categories = document.getElementById('new-product-category');
+        if (!locals || !categories) return;
+        function refreshCategories() {
+          Array.from(categories.options).forEach(function (option) {
+            if (option.value) option.hidden = option.dataset.localId !== locals.value;
+          });
+          categories.value = '';
+        }
+        locals.addEventListener('change', refreshCategories);
+        refreshCategories();
+      })();
+    </script>
+  `
+}) %>

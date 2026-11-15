@@ -5,7 +5,13 @@
   </div>
   <div class="topbar-actions">
     <% if (user) { %>
-      <span class="user-chip"><%= user.fullName %> · <%= user.role %></span>
+      <span class="user-chip"><%= user.fullName %> · <%= user.role %> · <%= user.subscriptionPlan || 'PREMIUM' %></span>
+      <% if (supportMode) { %>
+        <span class="user-chip">Soporte GC · <%= supportCompanyName %> · solo lectura</span>
+        <form method="post" action="/soporte/volver">
+          <button class="btn btn-sm btn-outline-light" type="submit">Volver a soporte</button>
+        </form>
+      <% } %>
       <form method="post" action="/auth/logout">
         <button class="btn btn-sm btn-outline-light" type="submit">Cerrar sesion</button>
       </form>
