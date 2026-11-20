@@ -21,7 +21,9 @@ export class SecurityController {
         roles: data.roles,
         assignableRoles: data.assignableRoles,
         locals: data.locals,
-        canManageRoles: data.canManageRoles,
+        canManageRoles: data.canManageRoles && (
+          req.session.user?.subscriptionPlan === 'PREMIUM' || Boolean(req.session.support?.targetCompanyId)
+        ),
         availablePermissions: data.availablePermissions,
         error: null,
       });
@@ -107,7 +109,9 @@ export class SecurityController {
           roles: data.roles,
           assignableRoles: data.assignableRoles,
           locals: data.locals,
-          canManageRoles: data.canManageRoles,
+          canManageRoles: data.canManageRoles && (
+            req.session.user?.subscriptionPlan === 'PREMIUM' || Boolean(req.session.support?.targetCompanyId)
+          ),
           availablePermissions: data.availablePermissions,
           error: error.message,
         });

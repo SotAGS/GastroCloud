@@ -18,12 +18,28 @@ import { handleValidation } from '../middlewares/validation.middleware';
 const router = Router();
 const securityController = new SecurityController();
 
-router.use(requireAuth, requireSubscriptionPlan(SubscriptionPlan.PREMIUM));
+const requirePremiumOrCompanyAdmin = (req: Request, res: Response, next: NextFunction): void => {
+  if (
+    req.session.support?.targetCompanyId ||
+    req.session.user?.subscriptionPlan === SubscriptionPlan.PREMIUM ||
+    req.session.user?.role === UserRole.ADMIN
+  ) {
+    next();
+    return;
+  }
+
+  res.status(403).render('partials/error-page', {
+    user: req.session.user ?? null,
+    message: 'La gestión de usuarios requiere Premium o una cuenta administradora.',
+    details: [],
+  });
+};
+
+router.use(requireAuth, requirePremiumOrCompanyAdmin);
 
 router.get(
   '/',
   requireAuth,
-  requireSubscriptionPlan(SubscriptionPlan.PREMIUM),
   requirePermission('seguridad:view'),
   (req, res, next) => securityController.dashboard(req, res, next),
 );
@@ -35,7 +51,6 @@ router.get('/usuarios', requireAuth, requirePermission('seguridad:view'), (req, 
 router.post(
   '/usuarios',
   requireAuth,
-  requireSubscriptionPlan(SubscriptionPlan.PREMIUM),
   requirePermission('seguridad:manage-users'),
   createUserValidator,
   handleValidation,
@@ -64,13 +79,14 @@ router.patch(
   (req: Request, res: Response, next: NextFunction) => securityController.updateUserSecurity(req, res, next),
 );
 
-router.post('/usuarios/empleado/reset-password', requireAuth, requireRole(UserRole.ADMIN), requirePermission('seguridad:manage-users'), (req, res, next) =>
+router.post('/usuarios/empleado/reset-password', requireAuth, requireSubscriptionPlan(SubscriptionPlan.PREMIUM), requireRole(UserRole.ADMIN), requirePermission('seguridad:manage-users'), (req, res, next) =>
   securityController.resetEmployeePassword(req, res, next),
 );
 
 router.post(
   '/roles',
   requireAuth,
+  requireSubscriptionPlan(SubscriptionPlan.PREMIUM),
   requireRole(UserRole.ADMIN),
   requirePermission('seguridad:manage-roles'),
   createRoleValidator,
@@ -81,6 +97,7 @@ router.post(
 router.put(
   '/roles/:id',
   requireAuth,
+  requireSubscriptionPlan(SubscriptionPlan.PREMIUM),
   requireRole(UserRole.ADMIN),
   requirePermission('seguridad:manage-roles'),
   updateRoleValidator,
@@ -88,13 +105,14 @@ router.put(
   (req: Request, res: Response, next: NextFunction) => securityController.updateRole(req, res, next),
 );
 
-router.delete('/roles/:id', requireAuth, requireRole(UserRole.ADMIN), requirePermission('seguridad:manage-roles'), (req, res, next) =>
+router.delete('/roles/:id', requireAuth, requireSubscriptionPlan(SubscriptionPlan.PREMIUM), requireRole(UserRole.ADMIN), requirePermission('seguridad:manage-roles'), (req, res, next) =>
   securityController.deleteRole(req, res, next),
 );
 
 router.patch(
   '/roles/:id/permisos',
   requireAuth,
+  requireSubscriptionPlan(SubscriptionPlan.PREMIUM),
   requireRole(UserRole.ADMIN),
   requirePermission('seguridad:manage-permissions'),
   updateRolePermissionsValidator,

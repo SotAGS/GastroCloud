@@ -5,6 +5,7 @@ import { UserRepository } from '../repositories/user.repository';
 import { HttpError } from '../utils/http-error.util';
 import { SubscriptionPlan } from '../enums/subscription-plan.enum';
 import { UserRole } from '../enums/user-role.enum';
+import { sequelize } from '../config/database.config';
 
 interface UpdateUserSecurityPayload {
   roleId: string;
@@ -64,6 +65,8 @@ const DEFAULT_PERMISSIONS = [
   'seguridad:manage-roles',
   'seguridad:manage-permissions',
 ] as const;
+
+const FREEMIUM_MAX_USERS = 2;
 
 export class SecurityService {
   private readonly userRepository = new UserRepository();
@@ -136,8 +139,14 @@ export class SecurityService {
     payload: CreateUserPayload,
     actor: { companyId: string | null; subscriptionPlan: string | null; role: string },
   ): Promise<void> {
-    if (actor.subscriptionPlan !== SubscriptionPlan.PREMIUM) {
-      throw new HttpError(403, 'La creación de usuarios está reservada al plan Premium.');
+    if (
+      actor.subscriptionPlan !== SubscriptionPlan.FREEMIUM &&
+      actor.subscriptionPlan !== SubscriptionPlan.PREMIUM
+    ) {
+      throw new HttpError(403, 'El plan actual no permite crear usuarios.');
+    }
+    if (actor.subscriptionPlan === SubscriptionPlan.FREEMIUM && actor.role !== UserRole.ADMIN) {
+      throw new HttpError(403, 'Solo el administrador de la empresa puede crear usuarios en Freemium.');
     }
 
     const requestedCompanyId = payload.companyId ?? actor.companyId;
@@ -145,36 +154,48 @@ export class SecurityService {
       throw new HttpError(403, 'No puedes crear usuarios fuera de tu empresa.');
     }
 
-    const company = await Company.findByPk(requestedCompanyId);
-    if (!company) {
-      throw new HttpError(404, 'Empresa no encontrada.');
-    }
-
-    const local = payload.localId
-      ? await Local.findOne({ where: { id: payload.localId, companyId: company.id, isActive: true } })
-      : null;
-    if (!local) {
-      throw new HttpError(400, 'El local indicado no pertenece a la empresa actual.');
-    }
-
     await this.ensureUniqueUserFields(payload.username, payload.email);
-
-    const role = await Role.findByPk(payload.roleId);
-    if (!role || !this.canAssignRoleToCompany(role, company.id, actor.role)) {
-      throw new HttpError(400, 'Rol invalido.');
-    }
 
     const passwordHash = await bcrypt.hash(payload.password, 10);
 
-    await User.create({
-      fullName: payload.fullName,
-      username: payload.username,
-      email: payload.email,
-      passwordHash,
-      roleId: payload.roleId,
-      companyId: company.id,
-      localId: local.id,
-      isActive: payload.isActive,
+    await sequelize.transaction(async (transaction) => {
+      const company = await Company.findByPk(requestedCompanyId, {
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+      if (!company) {
+        throw new HttpError(404, 'Empresa no encontrada.');
+      }
+
+      if (actor.subscriptionPlan === SubscriptionPlan.FREEMIUM) {
+        const userCount = await User.count({ where: { companyId: company.id }, transaction });
+        if (userCount >= FREEMIUM_MAX_USERS) {
+          throw new HttpError(403, 'El plan Freemium permite un máximo de 2 usuarios.');
+        }
+      }
+
+      const local = payload.localId
+        ? await Local.findOne({ where: { id: payload.localId, companyId: company.id, isActive: true }, transaction })
+        : null;
+      if (!local) {
+        throw new HttpError(400, 'El local indicado no pertenece a la empresa actual.');
+      }
+
+      const role = await Role.findByPk(payload.roleId, { transaction });
+      if (!role || !this.canAssignRoleToCompany(role, company.id, actor.role)) {
+        throw new HttpError(400, 'Rol invalido.');
+      }
+
+      await User.create({
+        fullName: payload.fullName,
+        username: payload.username,
+        email: payload.email,
+        passwordHash,
+        roleId: payload.roleId,
+        companyId: company.id,
+        localId: local.id,
+        isActive: payload.isActive,
+      }, { transaction });
     });
   }
 

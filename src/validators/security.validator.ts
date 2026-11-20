@@ -11,7 +11,7 @@ export const createUserValidator = [
     .matches(USERNAME_PATTERN)
     .withMessage('Usuario solo puede contener letras, numeros, punto, guion y guion bajo.'),
   body('email').trim().isEmail().withMessage('Email invalido.').normalizeEmail(),
-  body('password').isLength({ min: 6 }).withMessage('Contrasena debe tener al menos 6 caracteres.'),
+  body('password').notEmpty().withMessage('Contrasena es obligatoria.'),
   body('roleId').trim().notEmpty().withMessage('Rol es obligatorio.'),
   body('companyId').optional({ values: 'falsy' }).trim().notEmpty().withMessage('Empresa invalida.'),
   body('localId').optional({ values: 'falsy' }).trim().notEmpty().withMessage('Local invalido.'),
@@ -27,7 +27,7 @@ export const updateUserValidator = [
     .matches(USERNAME_PATTERN)
     .withMessage('Usuario solo puede contener letras, numeros, punto, guion y guion bajo.'),
   body('email').trim().isEmail().withMessage('Email invalido.').normalizeEmail(),
-  body('password').optional({ values: 'falsy' }).isLength({ min: 6 }).withMessage('Contrasena minima: 6.'),
+  body('password').optional({ values: 'falsy' }).isString().withMessage('Contrasena invalida.'),
   body('roleId').trim().notEmpty().withMessage('Rol es obligatorio.'),
   body('localId').isUUID().withMessage('Sucursal invalida.'),
   body('isActive').optional().isIn(['on']).withMessage('Estado invalido.'),

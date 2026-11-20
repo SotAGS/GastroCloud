@@ -37,7 +37,8 @@ const newUserRoles = typeof assignableRoles === 'undefined' ? roles : assignable
           <input class="form-control form-control-sm" type="email" name="email" placeholder="Email" required />
         </div>
         <div class="col-md-2">
-          <input class="form-control form-control-sm" type="password" name="password" placeholder="Contrasena" required />
+          <input class="form-control form-control-sm" type="password" name="password" placeholder="Contrasena" required data-password-warning-input />
+          <small class="text-warning small" data-password-warning hidden>Es corta e insegura, pero puedes usarla para el prototipo.</small>
         </div>
         <div class="col-md-2">
           <select class="form-select form-select-sm" name="roleId" required>
@@ -119,7 +120,10 @@ const newUserRoles = typeof assignableRoles === 'undefined' ? roles : assignable
                       <td>${row.lastLoginAt ? escapeHtml(new Date(row.lastLoginAt).toLocaleString('es-AR')) : '-'}</td>
                       <td>
                         <div class="d-flex gap-2">
-                        <input class="form-control form-control-sm" type="password" name="password" placeholder="Nueva clave (opcional)" form="update-user-${escapeHtml(row.id)}" ${!canManageRoles && row.roleName === 'ADMIN' ? 'disabled' : ''} />
+                        <div>
+                          <input class="form-control form-control-sm" type="password" name="password" placeholder="Nueva clave (opcional)" form="update-user-${escapeHtml(row.id)}" data-password-warning-input ${!canManageRoles && row.roleName === 'ADMIN' ? 'disabled' : ''} />
+                          <small class="text-warning small" data-password-warning hidden>Es corta e insegura, pero puedes usarla para el prototipo.</small>
+                        </div>
                         <form id="update-user-${escapeHtml(row.id)}" method="post" action="/seguridad/usuarios/${escapeHtml(row.id)}">
                           <input type="hidden" name="_method" value="PUT" />
                           <button class="btn btn-sm btn-outline-light" type="submit" ${!canManageRoles && row.roleName === 'ADMIN' ? 'disabled' : ''}>Guardar</button>
@@ -226,5 +230,13 @@ const newUserRoles = typeof assignableRoles === 'undefined' ? roles : assignable
       </div>
       ` : ''}
     </section>
+    <script>
+      document.addEventListener('input', (event) => {
+        const input = event.target;
+        if (!(input instanceof HTMLInputElement) || !input.matches('[data-password-warning-input]')) return;
+        const warning = input.parentElement.querySelector('[data-password-warning]');
+        warning.hidden = input.value.length === 0 || input.value.length >= 8;
+      });
+    </script>
   `
 }) %>

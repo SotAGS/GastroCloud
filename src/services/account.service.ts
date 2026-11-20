@@ -1,6 +1,5 @@
 import bcrypt from 'bcrypt';
 import crypto from 'node:crypto';
-import { Op } from 'sequelize';
 import { UserRole } from '../enums/user-role.enum';
 import { SubscriptionPlan } from '../enums/subscription-plan.enum';
 import { Company, Local, Role, User } from '../models';
@@ -9,8 +8,6 @@ import { sequelize } from '../config/database.config';
 import { BootstrapSecurityService } from './bootstrap-security.service';
 
 export interface RegisterCompanyInput {
-  fullName: string;
-  username: string;
   email: string;
   password: string;
   companyName: string;
@@ -19,14 +16,13 @@ export interface RegisterCompanyInput {
 
 export class AccountService {
   async registerCompany(payload: RegisterCompanyInput) {
-    const fullName = payload.fullName.trim();
     const companyName = payload.companyName.trim();
     const localName = (payload.localName ?? 'Sucursal principal').trim() || 'Sucursal principal';
-    const username = payload.username.trim();
     const email = payload.email.trim().toLowerCase();
     const password = payload.password;
+    const username = `cuenta-${crypto.randomUUID()}`;
 
-    if (!fullName || !companyName || !username || !email || !password) {
+    if (!companyName || !email || !password) {
       throw new HttpError(400, 'Todos los campos obligatorios deben completarse.');
     }
 
@@ -35,16 +31,13 @@ export class AccountService {
     return sequelize.transaction(async (transaction) => {
       const existingUser = await User.findOne({
         where: {
-          [Op.or]: [{ username }, { email }],
+          email,
         },
         transaction,
       });
 
       if (existingUser) {
-        throw new HttpError(
-          400,
-          existingUser.username === username ? 'El nombre de usuario ya existe.' : 'El correo ya está registrado.',
-        );
+        throw new HttpError(400, 'El correo ya está registrado.');
       }
 
       const role = await Role.findOne({ where: { name: UserRole.ADMIN, companyId: null }, transaction });
@@ -77,7 +70,7 @@ export class AccountService {
 
       const user = await User.create(
         {
-          fullName,
+          fullName: 'Administrador de empresa',
           username,
           email,
           passwordHash,

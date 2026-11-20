@@ -6,10 +6,8 @@ export const loginValidator = [
 ];
 
 export const registerValidator = [
-  body('fullName').trim().notEmpty().withMessage('El nombre completo es obligatorio.'),
   body('companyName').trim().notEmpty().withMessage('El nombre de la empresa es obligatorio.'),
   body('localName').trim().notEmpty().withMessage('El nombre de la sucursal es obligatorio.'),
-  body('username').trim().notEmpty().withMessage('El usuario es obligatorio.'),
-  body('email').isEmail().withMessage('El correo es invalido.'),
-  body('password').isLength({ min: 8 }).withMessage('La contraseña debe tener al menos 8 caracteres.'),
+  body('email').trim().isEmail().withMessage('El correo es invalido.').normalizeEmail(),
+  body('password').notEmpty().withMessage('La contraseña es obligatoria.'),
 ];

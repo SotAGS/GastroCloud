@@ -25,9 +25,9 @@
     <% if (user?.role === 'ADMIN' || user?.permissions?.includes('reportes:view')) { %>
       <a href="/reportes/soporte">Actividad de soporte</a>
     <% } %>
-    <% if (['ADMIN', 'GERENTE'].includes(user?.role) && (supportMode || user?.subscriptionPlan === 'PREMIUM')) { %>
+    <% if (user?.role === 'ADMIN' || (user?.role === 'GERENTE' && (supportMode || user?.subscriptionPlan === 'PREMIUM'))) { %>
       <a href="/seguridad/usuarios">Seguridad y roles</a>
-    <% } else if (['ADMIN', 'GERENTE'].includes(user?.role)) { %>
+    <% } else if (user?.role === 'GERENTE') { %>
       <span class="text-light-emphasis small d-block px-3 py-2">Seguridad y roles requieren Premium</span>
     <% } %>
     <% if (user?.role === 'ADMIN' && !supportMode) { %>

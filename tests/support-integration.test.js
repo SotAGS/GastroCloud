@@ -273,16 +273,51 @@ test('soporte entra en una empresa con auditoría y no puede modificarla', {
     response = await publicUser('/auth/register', {
       method: 'POST',
       body: {
-        fullName: 'Cliente nuevo', companyName: 'Empresa nueva', localName: 'Principal',
-        username: 'owner_new', email: 'owner_new@example.test', password: 'owner-password',
+        companyName: 'Empresa nueva', localName: 'Principal',
+        email: 'owner_new@example.test', password: '1',
       },
     });
     assert.equal(response.status, 302);
     response = await publicUser('/dashboard');
     assert.equal(response.status, 200);
-    const registered = await User.findOne({ where: { username: 'owner_new' }, include: ['company'] });
+    const registered = await User.findOne({
+      where: { email: 'owner_new@example.test' },
+      include: ['company', 'local', 'role'],
+    });
+    assert.equal(registered.company.name, 'Empresa nueva');
+    assert.equal(registered.local.name, 'Principal');
+    assert.equal(registered.company.subscriptionPlan, 'FREEMIUM');
+    assert.equal(registered.role.name, 'ADMIN');
     assert.equal(registered.company.isSupportOperator, false);
     assert.equal(await SupportAccount.count({ where: { userId: registered.id } }), 0);
+    response = await publicUser('/seguridad');
+    assert.equal(response.status, 200);
+    const employeeRole = await Role.findOne({ where: { name: 'EMPLEADO', companyId: null }, rejectOnEmpty: true });
+    response = await publicUser('/seguridad/usuarios', {
+      method: 'POST',
+      body: {
+        fullName: 'Usuario adicional',
+        username: 'new_employee',
+        email: 'new_employee@example.test',
+        password: '1',
+        roleId: employeeRole.id,
+        localId: registered.localId,
+      },
+    });
+    assert.equal(response.status, 302);
+    response = await publicUser('/seguridad/usuarios', {
+      method: 'POST',
+      body: {
+        fullName: 'Usuario excedido',
+        username: 'extra_employee',
+        email: 'extra_employee@example.test',
+        password: '1',
+        roleId: employeeRole.id,
+        localId: registered.localId,
+      },
+    });
+    assert.equal(response.status, 403);
+    assert.equal(await User.count({ where: { companyId: registered.companyId } }), 2);
   } finally {
     sandboxProvider.request = originalProviderRequest;
     if (server) await new Promise((resolve) => server.close(resolve));

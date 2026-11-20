@@ -39,16 +39,14 @@ export class AuthController {
   async register(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const account = await this.accountService.registerCompany({
-        fullName: String(req.body.fullName ?? ''),
         companyName: String(req.body.companyName ?? ''),
         localName: String(req.body.localName ?? 'Sucursal principal'),
-        username: String(req.body.username ?? ''),
         email: String(req.body.email ?? ''),
         password: String(req.body.password ?? ''),
       });
 
       const user = await this.authService.login({
-        usernameOrEmail: account.companyId ? String(req.body.username ?? '') : '',
+        usernameOrEmail: account.companyId ? String(req.body.email ?? '') : '',
         password: String(req.body.password ?? ''),
       });
 
