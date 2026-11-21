@@ -8,6 +8,11 @@ const { priceSaleDetails } = require('../dist/utils/sale-price.util.js');
 const { BootstrapSecurityService } = require('../dist/services/bootstrap-security.service.js');
 const { validationResult } = require('express-validator');
 const { createSaleValidator } = require('../dist/validators/sale.validator.js');
+const { loadNavigationPermissions } = require('../dist/middlewares/permission.middleware.js');
+const { SecurityController } = require('../dist/controllers/security.controller.js');
+const { HttpError } = require('../dist/utils/http-error.util.js');
+const ejs = require('ejs');
+const path = require('node:path');
 
 test('Freemium permite ventas y bloquea compras, empleados y chat', () => {
   const caps = getPlanCapabilities('FREEMIUM');
@@ -64,6 +69,17 @@ test('El administrador y los roles de empresa ven sus sucursales; el empleado co
 test('El alcance tenant falla cerrado si falta empresa o sucursal de empleado', () => {
   assert.throws(() => getTenantScope({ role: 'ADMIN' }), { statusCode: 403 });
   assert.throws(() => getTenantScope({ companyId: 'c1', role: 'EMPLEADO' }), { statusCode: 403 });
+});
+
+test('el alcance de un rol se conserva aunque se cambie su nombre', () => {
+  assert.deepEqual(getTenantScope({ companyId: 'c1', localId: 'l1', role: 'SUPERVISOR', companyWideAccess: true }), {
+    companyId: 'c1',
+    localId: null,
+  });
+  assert.deepEqual(getTenantScope({ companyId: 'c1', localId: 'l1', role: 'CAJERO', companyWideAccess: false }), {
+    companyId: 'c1',
+    localId: 'l1',
+  });
 });
 
 test('La venta exige stock positivo y suficiente para toda la cantidad', () => {
@@ -123,4 +139,77 @@ test('GERENTE y CONTADOR tienen permisos diferenciados y limitados', () => {
   assert.equal(accountantPermissions.includes('reportes:view'), true);
   assert.equal(accountantPermissions.includes('catalog:manage-products'), false);
   assert.equal(accountantPermissions.includes('seguridad:manage-users'), false);
+});
+
+test('el menú muestra solo rutas permitidas por rol y plan', async () => {
+    async function menu(user, supportMode = false, isProduction = false) {
+      const req = { session: { user } };
+      const res = { locals: {} };
+      let nextError;
+      await loadNavigationPermissions(req, res, (error) => { nextError = error; });
+      if (nextError) throw nextError;
+      return ejs.renderFile(path.join(__dirname, '..', 'src', 'views', 'partials', 'sidebar.ejs'), {
+        user, supportMode, isProduction, canNavigate: res.locals.canNavigate,
+      });
+    }
+
+    const accountant = await menu({
+      role: 'CONTADOR', roleId: 'accountant', permissions: ['dashboard:view', 'reportes:view'],
+      subscriptionPlan: 'FREEMIUM',
+    });
+    assert.match(accountant, /href="\/dashboard"/);
+    assert.match(accountant, /href="\/reportes\/soporte"/);
+    assert.doesNotMatch(accountant, /href="\/ventas"|href="\/stock"|href="\/compras"|href="\/reportes"|href="\/catalogo\/productos"/);
+
+    const customPremium = await menu({
+      role: 'PERSONALIZADO', roleId: 'role',
+      permissions: ['stock:view', 'catalog:read', 'compras:view'], subscriptionPlan: 'PREMIUM',
+    });
+    assert.match(customPremium, /href="\/stock"/);
+    assert.match(customPremium, /href="\/compras"/);
+    assert.match(customPremium, /href="\/catalogo\/productos"/);
+    assert.doesNotMatch(customPremium, /href="\/ventas"|href="\/seguridad\/usuarios"/);
+
+    const adminProduction = await menu({ role: 'ADMIN', permissions: [], subscriptionPlan: 'FREEMIUM' }, false, true);
+    assert.match(adminProduction, /href="\/seguridad\/usuarios"/);
+    assert.doesNotMatch(adminProduction, /href="\/compras"|href="\/planes"/);
+
+    const support = await menu({ role: 'ADMIN', permissions: [], subscriptionPlan: 'FREEMIUM' }, true);
+    assert.match(support, /href="\/compras"/);
+    assert.doesNotMatch(support, /href="\/empresa"|href="\/planes"/);
+});
+
+test('al repetir un email se conserva el formulario sin volver a mostrar la contraseña', async () => {
+  const controller = new SecurityController();
+  controller.securityService.createUser = async () => { throw new HttpError(400, 'El email ya esta en uso.'); };
+  controller.securityService.securityDashboard = async () => ({
+    users: [], roles: [{ id: 'r1', name: 'EMPLEADO' }],
+    assignableRoles: [{ id: 'r1', name: 'EMPLEADO' }],
+    locals: [{ id: 'l1', name: 'Principal' }], canManageRoles: false, availablePermissions: [],
+  });
+  const user = { companyId: 'c1', localId: 'l1', role: 'ADMIN', subscriptionPlan: 'FREEMIUM' };
+  const req = { session: { user }, body: {
+    fullName: 'Nombre <prueba>', username: 'usuario', email: 'usado@example.test',
+    password: 'secret-not-for-html', roleId: 'r1', localId: 'l1', isActive: 'on',
+  } };
+  let status;
+  let view;
+  let locals;
+  const res = {
+    status(code) { status = code; return this; },
+    render(name, data) { view = name; locals = data; },
+  };
+  let nextError;
+  await controller.createUser(req, res, (error) => { nextError = error; });
+  assert.equal(nextError, undefined);
+  assert.equal(status, 400);
+  assert.equal(view, 'seguridad/usuarios');
+  const html = await ejs.renderFile(path.join(__dirname, '..', 'src', 'views', 'seguridad', 'usuarios.ejs'), {
+    ...locals, supportMode: false, supportCompanyName: null, isProduction: false, canNavigate: () => true,
+  });
+  assert.match(html, /El email ya esta en uso/);
+  assert.match(html, /value="Nombre &lt;prueba&gt;"/);
+  assert.match(html, /value="usado@example.test"/);
+  assert.match(html, /value="r1" selected/);
+  assert.doesNotMatch(html, /secret-not-for-html/);
 });

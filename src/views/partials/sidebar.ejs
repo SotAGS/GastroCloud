@@ -7,31 +7,29 @@
     </div>
   </div>
   <nav class="menu-nav">
-    <a href="/dashboard">Dashboard</a>
-    <a href="/ventas">Ventas</a>
-    <a href="/stock">Stock</a>
-    <% if (supportMode || user?.subscriptionPlan === 'PREMIUM') { %>
+    <% if (canNavigate('dashboard:view')) { %><a href="/dashboard">Dashboard</a><% } %>
+    <% if (canNavigate('ventas:view')) { %><a href="/ventas">Ventas</a><% } %>
+    <% if (canNavigate('stock:view')) { %><a href="/stock">Stock</a><% } %>
+    <% if ((supportMode || user?.subscriptionPlan === 'PREMIUM') && canNavigate('compras:view')) { %>
       <a href="/compras">Compras</a>
-      <a href="/ia/chat">Asistente IA</a>
-    <% } else { %>
-      <span class="text-light-emphasis small d-block px-3 py-2">Asistente IA requiere Premium</span>
     <% } %>
-    <% if (user?.role === 'ADMIN' || user?.role === 'GERENTE') { %>
+    <% if (supportMode || user?.subscriptionPlan === 'PREMIUM') { %>
+      <a href="/ia/chat">Asistente IA</a>
+    <% } %>
+    <% if (canNavigate('catalog:read')) { %>
       <a href="/catalogo/productos">Catálogo</a>
     <% } %>
-    <% if ((supportMode || user?.subscriptionPlan === 'PREMIUM') && (user?.permissions?.includes('reportes:view') || ['ADMIN', 'GERENTE'].includes(user?.role))) { %>
+    <% if ((supportMode || user?.subscriptionPlan === 'PREMIUM') && canNavigate('reportes:view')) { %>
       <a href="/reportes">Reportes</a>
     <% } %>
-    <% if (user?.role === 'ADMIN' || user?.permissions?.includes('reportes:view')) { %>
+    <% if (canNavigate('reportes:view')) { %>
       <a href="/reportes/soporte">Actividad de soporte</a>
     <% } %>
-    <% if (user?.role === 'ADMIN' || (user?.role === 'GERENTE' && (supportMode || user?.subscriptionPlan === 'PREMIUM'))) { %>
+    <% if ((supportMode || user?.subscriptionPlan === 'PREMIUM' || user?.role === 'ADMIN') && canNavigate('seguridad:view')) { %>
       <a href="/seguridad/usuarios">Seguridad y roles</a>
-    <% } else if (user?.role === 'GERENTE') { %>
-      <span class="text-light-emphasis small d-block px-3 py-2">Seguridad y roles requieren Premium</span>
     <% } %>
     <% if (user?.role === 'ADMIN' && !supportMode) { %>
-      <a href="/planes">Mi plan</a>
+      <% if (!isProduction) { %><a href="/planes">Mi plan</a><% } %>
       <a href="/empresa">Mi empresa</a>
     <% } %>
   </nav>

@@ -3,6 +3,13 @@ import { SecurityService } from '../services/security.service';
 
 const securityService = new SecurityService();
 
+export const loadNavigationPermissions = (req: Request, res: Response, next: NextFunction): void => {
+  const user = req.session.user;
+  res.locals.canNavigate = (permission: string): boolean =>
+    Boolean(user?.role && (user.role === 'ADMIN' || user.permissions?.includes(permission)));
+  next();
+};
+
 export const requirePermission = (permission: string) => {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const roleName = req.session.user?.role;

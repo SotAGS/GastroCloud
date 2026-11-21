@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from 'express';
-import { Company, SupportAccount, SupportActivity, User } from '../models';
+import { Company, Role, RolePermission, SupportAccount, SupportActivity, User } from '../models';
 import { HttpError } from '../utils/http-error.util';
 import { isProduction } from '../config/env.config';
 import { getEffectiveSubscriptionPlan } from '../services/account-policy.service';
@@ -30,6 +30,26 @@ export async function supportContext(req: Request, res: Response, next: NextFunc
         });
         return;
       }
+      const currentUser = await User.findByPk(user.id, {
+        include: [{ model: Role, include: [{ model: RolePermission }] }],
+      });
+      const role = currentUser?.role;
+      if (!currentUser?.isActive || currentUser.companyId !== company.id || !role ||
+          (role.name === 'ADMIN' && role.companyId !== null) ||
+          (role.companyId !== company.id &&
+            !(role.companyId === null && ['ADMIN', 'EMPLEADO'].includes(role.name)))) {
+        req.session.destroy((error) => {
+          if (error) next(error);
+          else res.redirect('/auth/login');
+        });
+        return;
+      }
+      user.roleId = role.id;
+      user.role = role.name;
+      user.fullName = currentUser.fullName;
+      user.localId = currentUser.localId;
+      user.companyWideAccess = role.companyWideAccess;
+      user.permissions = (role.permissions ?? []).map((permission) => `${permission.module}:${permission.action}`);
       user.subscriptionPlan = getEffectiveSubscriptionPlan(
         company.subscriptionPlan,
         company.subscriptionStatus,

@@ -7,26 +7,37 @@ import { User } from '../models';
 export class SecurityController {
   private readonly securityService = new SecurityService();
 
+  private async renderDashboard(
+    req: Request,
+    res: Response,
+    statusCode = 200,
+    error: string | null = null,
+    createUserForm: Record<string, string | boolean> | null = null,
+  ): Promise<void> {
+    const companyId = req.session.user?.companyId;
+    if (!companyId) {
+      throw new HttpError(403, 'La cuenta no está asociada a una empresa.');
+    }
+    const data = await this.securityService.securityDashboard(companyId, req.session.user?.role);
+
+    res.status(statusCode).render('seguridad/usuarios', {
+      user: req.session.user,
+      users: data.users,
+      roles: data.roles,
+      assignableRoles: data.assignableRoles,
+      locals: data.locals,
+      canManageRoles: data.canManageRoles && (
+        req.session.user?.subscriptionPlan === 'PREMIUM' || Boolean(req.session.support?.targetCompanyId)
+      ),
+      availablePermissions: data.availablePermissions,
+      error,
+      createUserForm,
+    });
+  }
+
   async dashboard(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const companyId = req.session.user?.companyId;
-      if (!companyId) {
-        throw new HttpError(403, 'La cuenta no está asociada a una empresa.');
-      }
-      const data = await this.securityService.securityDashboard(companyId, req.session.user?.role);
-
-      res.render('seguridad/usuarios', {
-        user: req.session.user,
-        users: data.users,
-        roles: data.roles,
-        assignableRoles: data.assignableRoles,
-        locals: data.locals,
-        canManageRoles: data.canManageRoles && (
-          req.session.user?.subscriptionPlan === 'PREMIUM' || Boolean(req.session.support?.targetCompanyId)
-        ),
-        availablePermissions: data.availablePermissions,
-        error: null,
-      });
+      await this.renderDashboard(req, res);
     } catch (error) {
       next(error);
     }
@@ -54,6 +65,21 @@ export class SecurityController {
 
       res.redirect('/seguridad');
     } catch (error) {
+      if (error instanceof HttpError) {
+        try {
+          await this.renderDashboard(req, res, error.statusCode, error.message, {
+            fullName: String(req.body.fullName ?? ''),
+            username: String(req.body.username ?? ''),
+            email: String(req.body.email ?? ''),
+            roleId: String(req.body.roleId ?? ''),
+            localId: String(req.body.localId ?? ''),
+            isActive: req.body.isActive === 'on',
+          });
+        } catch (renderError) {
+          next(renderError);
+        }
+        return;
+      }
       next(error);
     }
   }
@@ -99,22 +125,11 @@ export class SecurityController {
       res.redirect('/seguridad');
     } catch (error) {
       if (error instanceof HttpError) {
-        const data = await this.securityService.securityDashboard(
-          String(req.session.user?.companyId ?? ''),
-          req.session.user?.role,
-        );
-        res.status(error.statusCode).render('seguridad/usuarios', {
-          user: req.session.user,
-          users: data.users,
-          roles: data.roles,
-          assignableRoles: data.assignableRoles,
-          locals: data.locals,
-          canManageRoles: data.canManageRoles && (
-            req.session.user?.subscriptionPlan === 'PREMIUM' || Boolean(req.session.support?.targetCompanyId)
-          ),
-          availablePermissions: data.availablePermissions,
-          error: error.message,
-        });
+        try {
+          await this.renderDashboard(req, res, error.statusCode, error.message);
+        } catch (renderError) {
+          next(renderError);
+        }
         return;
       }
       next(error);

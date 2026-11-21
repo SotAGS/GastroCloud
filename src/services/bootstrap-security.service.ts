@@ -91,15 +91,18 @@ export class BootstrapSecurityService {
 
   static async ensureCompanyRoles(companyId: string, transaction?: Transaction): Promise<void> {
     for (const [name, description] of [
+      [UserRole.EMPLEADO, 'Usuario operativo con acceso limitado.'],
       [UserRole.GERENTE, 'Administra catálogo, usuarios y reportes de la empresa.'],
       [UserRole.CONTADOR, 'Consulta reportes de la empresa.'],
     ] as const) {
-      const [role] = await Role.findOrCreate({
+      const [role, created] = await Role.findOrCreate({
         where: { name, companyId },
-        defaults: { name, companyId, description },
+        defaults: { name, companyId, description, companyWideAccess: name !== UserRole.EMPLEADO },
         transaction,
       });
-      await this.ensureRolePermissions(role, transaction);
+      if (created) {
+        await this.ensureRolePermissions(role, transaction);
+      }
     }
   }
 
@@ -123,7 +126,7 @@ export class BootstrapSecurityService {
     await this.ensureRolePermissions(adminRole);
     await this.ensureRolePermissions(employeeRole);
 
-    const [company] = await Company.findOrCreate({
+    const [company, companyCreated] = await Company.findOrCreate({
       where: { slug: 'gastrocloud-demo' },
       defaults: {
         name: 'GastroCloud Demo',
@@ -144,9 +147,8 @@ export class BootstrapSecurityService {
       },
     });
 
-    const companies = await Company.findAll({ attributes: ['id'] });
-    for (const tenantCompany of companies) {
-      await this.ensureCompanyRoles(tenantCompany.id);
+    if (companyCreated) {
+      await this.ensureCompanyRoles(company.id);
     }
 
     const totalUsers = await User.count();
@@ -156,6 +158,12 @@ export class BootstrapSecurityService {
 
     const adminHash = await bcrypt.hash(env.demoAdminPassword, 10);
     const employeeHash = await bcrypt.hash(env.demoEmployeePassword, 10);
+    const companyEmployeeRole = await Role.findOne({
+      where: { name: UserRole.EMPLEADO, companyId: company.id },
+    });
+    if (!companyEmployeeRole) {
+      throw new Error('Falta el rol de empleado de la empresa demo. Aplica la migración 004_company_roles.sql.');
+    }
 
     await User.create({
       roleId: adminRole.id,
@@ -169,7 +177,7 @@ export class BootstrapSecurityService {
     });
 
     await User.create({
-      roleId: employeeRole.id,
+      roleId: companyEmployeeRole.id,
       companyId: company.id,
       localId: local.id,
       fullName: 'Empleado Demo',

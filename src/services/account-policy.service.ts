@@ -60,7 +60,7 @@ export function hasCompanyAccess(authUser: { companyId?: string | null } | null 
 }
 
 export function hasLocalAccess(
-  authUser: { companyId?: string | null; localId?: string | null; role?: string | null } | null | undefined,
+  authUser: { companyId?: string | null; localId?: string | null; role?: string | null; companyWideAccess?: boolean } | null | undefined,
   local: { companyId?: string | null; id?: string | null } | null | undefined,
   roleName?: string | null,
 ): boolean {
@@ -73,7 +73,7 @@ export function hasLocalAccess(
   }
 
   const resolvedRole = roleName ?? authUser.role ?? 'EMPLEADO';
-  if (resolvedRole === 'ADMIN' || resolvedRole === 'GERENTE') {
+  if (resolvedRole === 'ADMIN' || (authUser.companyWideAccess ?? resolvedRole === 'GERENTE')) {
     return true;
   }
 

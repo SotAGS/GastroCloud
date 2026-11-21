@@ -51,6 +51,32 @@ test('soporte entra en una empresa con auditoría y no puede modificarla', {
     await sequelize.query(premiumMigration);
     await BootstrapSecurityService.ensureBaseSecurityData();
     await sessionStore.sync();
+    const globalEmployeeRole = await Role.findOne({ where: { name: 'EMPLEADO', companyId: null }, rejectOnEmpty: true });
+    const legacyCompany = await Company.create({ name: 'Empresa anterior', slug: 'empresa-anterior', isActive: true });
+    const legacyLocal = await Local.create({ name: 'Sucursal', companyId: legacyCompany.id, isActive: true });
+    const legacyManager = await Role.create({
+      name: 'GERENTE', companyId: legacyCompany.id, description: 'Gerente anterior',
+    });
+    const legacyEmployee = await User.create({
+      roleId: globalEmployeeRole.id, companyId: legacyCompany.id, localId: legacyLocal.id,
+      fullName: 'Empleado anterior', username: 'legacy_employee', email: 'legacy@example.test',
+      passwordHash: await bcrypt.hash('legacy-password', 10), isActive: true,
+    });
+    await sequelize.query('ALTER TABLE role DROP COLUMN company_wide_access');
+    const rolesMigration = fs.readFileSync(path.join(__dirname, '..', 'scripts', 'migrations', '004_company_roles.sql'), 'utf8');
+    await sequelize.query(rolesMigration);
+    await sequelize.query(rolesMigration);
+    const legacyRole = await Role.findOne({
+      where: { companyId: legacyCompany.id, name: 'EMPLEADO' }, include: ['permissions'], rejectOnEmpty: true,
+    });
+    await legacyEmployee.reload();
+    assert.equal(legacyEmployee.roleId, legacyRole.id);
+    await legacyManager.reload();
+    assert.equal(legacyManager.companyWideAccess, true);
+    assert.deepEqual(
+      legacyRole.permissions.map((p) => `${p.module}:${p.action}`).sort(),
+      BootstrapSecurityService.getDefaultPermissionsForRole('EMPLEADO').sort(),
+    );
     const role = await Role.findOne({ where: { name: 'ADMIN', companyId: null }, rejectOnEmpty: true });
     const home = await Company.create({ name: 'Operador', slug: 'operador', subscriptionPlan: 'PREMIUM', subscriptionStatus: 'ACTIVE', isActive: true, isSupportOperator: true });
     const homeLocal = await Local.create({ name: 'Origen', companyId: home.id, isActive: true });
@@ -292,7 +318,38 @@ test('soporte entra en una empresa con auditoría y no puede modificarla', {
     assert.equal(await SupportAccount.count({ where: { userId: registered.id } }), 0);
     response = await publicUser('/seguridad');
     assert.equal(response.status, 200);
-    const employeeRole = await Role.findOne({ where: { name: 'EMPLEADO', companyId: null }, rejectOnEmpty: true });
+    const employeeRole = await Role.findOne({
+      where: { name: 'EMPLEADO', companyId: registered.companyId }, rejectOnEmpty: true,
+    });
+    response = await publicUser('/seguridad/usuarios', {
+      method: 'POST',
+      body: {
+        fullName: 'Usuario adicional',
+        username: 'new_employee',
+        email: 'owner_new@example.test',
+        password: 'temporary-password',
+        roleId: employeeRole.id,
+        localId: registered.localId,
+        isActive: 'on',
+      },
+    });
+    assert.equal(response.status, 400);
+    const duplicateEmailPage = await response.text();
+    assert.match(duplicateEmailPage, /El email ya esta en uso/);
+    assert.match(duplicateEmailPage, /value="Usuario adicional"/);
+    assert.match(duplicateEmailPage, /value="new_employee"/);
+    assert.doesNotMatch(duplicateEmailPage, /temporary-password/);
+    assert.equal(await User.count({ where: { companyId: registered.companyId } }), 1);
+    await legacyEmployee.destroy();
+    response = await publicUser('/seguridad/usuarios', {
+      method: 'POST',
+      body: {
+        fullName: 'Usuario adicional', username: 'new_employee', email: 'legacy@example.test',
+        password: '1', roleId: employeeRole.id, localId: registered.localId, isActive: 'on',
+      },
+    });
+    assert.equal(response.status, 400);
+    assert.match(await response.text(), /El email ya esta en uso/);
     response = await publicUser('/seguridad/usuarios', {
       method: 'POST',
       body: {
@@ -302,6 +359,7 @@ test('soporte entra en una empresa con auditoría y no puede modificarla', {
         password: '1',
         roleId: employeeRole.id,
         localId: registered.localId,
+        isActive: 'on',
       },
     });
     assert.equal(response.status, 302);
@@ -318,6 +376,64 @@ test('soporte entra en una empresa con auditoría y no puede modificarla', {
     });
     assert.equal(response.status, 403);
     assert.equal(await User.count({ where: { companyId: registered.companyId } }), 2);
+
+    await registered.company.update({ subscriptionPlan: 'PREMIUM', subscriptionStatus: 'ACTIVE' });
+    response = await publicUser('/seguridad');
+    assert.equal(response.status, 200);
+    assert.match(await response.text(), new RegExp(`value="${employeeRole.id}"`));
+    const employee = browser();
+    response = await employee('/auth/login', {
+      method: 'POST', body: { usernameOrEmail: 'new_employee', password: '1' },
+    });
+    assert.equal(response.status, 302);
+    response = await employee('/stock');
+    assert.equal(response.status, 200);
+    response = await publicUser(`/seguridad/roles/${employeeRole.id}`, {
+      method: 'POST', body: { _method: 'PUT', name: 'CAJERO', description: 'Caja' },
+    });
+    assert.equal(response.status, 302);
+    response = await publicUser(`/seguridad/roles/${employeeRole.id}/permisos`, {
+      method: 'POST', body: { _method: 'PATCH', permissions: 'dashboard:view' },
+    });
+    assert.equal(response.status, 302);
+    response = await employee('/stock');
+    assert.equal(response.status, 403);
+    response = await employee('/dashboard');
+    assert.equal(response.status, 200);
+    assert.doesNotMatch(await response.text(), /href="\/stock"/);
+    await BootstrapSecurityService.ensureBaseSecurityData();
+    await employeeRole.reload();
+    assert.equal(employeeRole.name, 'CAJERO');
+    await sequelize.query(rolesMigration);
+    assert.equal(await Role.count({ where: { companyId: registered.companyId, name: 'EMPLEADO' } }), 0);
+    response = await publicUser(`/seguridad/roles/${employeeRole.id}`, {
+      method: 'POST', body: { _method: 'DELETE' },
+    });
+    assert.equal(response.status, 400);
+    response = await publicUser('/seguridad/roles', { method: 'POST', body: { name: 'TEMPORAL' } });
+    assert.equal(response.status, 302);
+    const temporaryRole = await Role.findOne({ where: { companyId: registered.companyId, name: 'TEMPORAL' }, rejectOnEmpty: true });
+    response = await publicUser(`/seguridad/roles/${temporaryRole.id}`, { method: 'POST', body: { _method: 'DELETE' } });
+    assert.equal(response.status, 302);
+    assert.equal(await Role.findByPk(temporaryRole.id), null);
+    const managerRole = await Role.findOne({ where: { companyId: registered.companyId, name: 'GERENTE' }, rejectOnEmpty: true });
+    response = await publicUser(`/seguridad/roles/${managerRole.id}`, {
+      method: 'POST', body: { _method: 'PUT', name: 'SUPERVISOR', description: 'Empresa' },
+    });
+    assert.equal(response.status, 302);
+    await managerRole.reload();
+    assert.equal(managerRole.companyWideAccess, true);
+    response = await publicUser(`/seguridad/roles/${managerRole.id}/permisos`, {
+      method: 'POST', body: { _method: 'PATCH', permissions: 'dashboard:view' },
+    });
+    assert.equal(response.status, 302);
+    await BootstrapSecurityService.ensureBaseSecurityData();
+    const managerPermissions = await Role.findByPk(managerRole.id, { include: ['permissions'] });
+    assert.deepEqual(managerPermissions.permissions.map((p) => `${p.module}:${p.action}`), ['dashboard:view']);
+    assert.equal(await Role.count({ where: { companyId: registered.companyId, name: 'GERENTE' } }), 0);
+    assert.equal((await Role.findByPk(legacyRole.id, { include: ['permissions'] })).permissions.length, legacyRole.permissions.length);
+    response = await publicUser(`/seguridad/roles/${managerRole.id}`, { method: 'POST', body: { _method: 'DELETE' } });
+    assert.equal(response.status, 302);
   } finally {
     sandboxProvider.request = originalProviderRequest;
     if (server) await new Promise((resolve) => server.close(resolve));

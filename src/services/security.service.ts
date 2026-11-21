@@ -81,11 +81,11 @@ export class SecurityService {
     const roles = await this.listRoles(companyId, actorRole !== UserRole.ADMIN);
     const locals = await Local.findAll({ where: { companyId, isActive: true }, order: [['name', 'ASC']] });
     const assignableRoles =
-      actorRole === UserRole.GERENTE
+      actorRole !== UserRole.ADMIN
         ? roles.filter(
             (role) =>
-              (role.companyId === null && role.name === UserRole.EMPLEADO) ||
-              [UserRole.GERENTE, UserRole.CONTADOR].includes(role.name as UserRole),
+                role.companyId === companyId &&
+                [UserRole.EMPLEADO, UserRole.GERENTE, UserRole.CONTADOR].includes(role.name as UserRole),
           )
         : roles;
     return {
@@ -118,7 +118,7 @@ export class SecurityService {
   async listRoles(companyId: string, excludeGlobalAdmin = false) {
     const roles = await Role.findAll({
       where: {
-        [Op.or]: [{ companyId }, { companyId: null, name: excludeGlobalAdmin ? [UserRole.EMPLEADO] : [UserRole.ADMIN, UserRole.EMPLEADO] }],
+        [Op.or]: [{ companyId }, ...(excludeGlobalAdmin ? [] : [{ companyId: null, name: UserRole.ADMIN }])],
       },
       include: [{ model: RolePermission }],
       order: [['name', 'ASC']],
@@ -286,10 +286,6 @@ export class SecurityService {
     if (!role) {
       throw new HttpError(404, 'Rol no encontrado.');
     }
-    if ([UserRole.GERENTE, UserRole.CONTADOR].includes(role.name as UserRole)) {
-      throw new HttpError(400, 'Los roles base de la empresa no se pueden renombrar.');
-    }
-
     const roleName = payload.name.trim().toUpperCase();
     this.validateCustomRoleName(roleName);
     const duplicate = await Role.findOne({
@@ -310,20 +306,20 @@ export class SecurityService {
   }
 
   async deleteRole(roleId: string, companyId: string): Promise<void> {
-    const role = await Role.findOne({ where: { id: roleId, companyId }, include: [User] });
-    if (!role) {
-      throw new HttpError(404, 'Rol no encontrado.');
-    }
-    if ([UserRole.GERENTE, UserRole.CONTADOR].includes(role.name as UserRole)) {
-      throw new HttpError(400, 'Los roles base de la empresa no se pueden eliminar.');
-    }
+    await sequelize.transaction(async (transaction) => {
+      const role = await Role.findOne({
+        where: { id: roleId, companyId }, transaction, lock: transaction.LOCK.UPDATE,
+      });
+      if (!role) {
+        throw new HttpError(404, 'Rol no encontrado.');
+      }
+      if (await User.count({ where: { roleId: role.id }, paranoid: false, transaction })) {
+        throw new HttpError(400, 'No se puede eliminar un rol con usuarios asociados.');
+      }
 
-    if ((role.users || []).length > 0) {
-      throw new HttpError(400, 'No se puede eliminar un rol con usuarios asociados.');
-    }
-
-    await RolePermission.destroy({ where: { roleId: role.id } });
-    await role.destroy();
+      await RolePermission.destroy({ where: { roleId: role.id }, transaction });
+      await role.destroy({ transaction });
+    });
   }
 
   async updateRolePermissions(roleId: string, payload: UpdateRolePermissionsPayload, companyId: string): Promise<void> {
@@ -332,10 +328,6 @@ export class SecurityService {
     if (!role) {
       throw new HttpError(404, 'Rol no encontrado.');
     }
-    if ([UserRole.GERENTE, UserRole.CONTADOR].includes(role.name as UserRole)) {
-      throw new HttpError(400, 'Los permisos de los roles base de la empresa no se pueden modificar.');
-    }
-
     const permissions = Array.from(new Set(payload.permissions.map((permission) => permission.trim()).filter(Boolean)));
 
     for (const permission of permissions) {
@@ -344,22 +336,18 @@ export class SecurityService {
       }
     }
 
-    await RolePermission.destroy({ where: { roleId: role.id } });
-
-    if (permissions.length === 0) {
-      return;
-    }
-
-    await RolePermission.bulkCreate(
-      permissions.map((permission) => {
-        const [module, action] = permission.split(':');
-        return {
-          roleId: role.id,
-          module,
-          action,
-        };
-      }),
-    );
+    await sequelize.transaction(async (transaction) => {
+      await RolePermission.destroy({ where: { roleId: role.id }, transaction });
+      if (permissions.length > 0) {
+        await RolePermission.bulkCreate(
+          permissions.map((permission) => {
+            const [module, action] = permission.split(':');
+            return { roleId: role.id, module, action };
+          }),
+          { transaction },
+        );
+      }
+    });
   }
 
   async roleHasPermission(roleId: string, permission: string): Promise<boolean> {
@@ -403,7 +391,7 @@ export class SecurityService {
           [Op.or]: conditions,
         };
 
-    const existing = await User.findOne({ where });
+    const existing = await User.findOne({ where, paranoid: false });
     if (!existing) {
       return;
     }
@@ -422,23 +410,25 @@ export class SecurityService {
     currentRoleId?: string,
   ): boolean {
     if (role.companyId === null) {
-      return role.name === UserRole.EMPLEADO || (actorRole === UserRole.ADMIN && role.name === UserRole.ADMIN);
+      return actorRole === UserRole.ADMIN && role.name === UserRole.ADMIN;
     }
     if (role.companyId !== companyId) return false;
-    return actorRole !== UserRole.GERENTE ||
-      [UserRole.GERENTE, UserRole.CONTADOR].includes(role.name as UserRole) ||
-      role.id === currentRoleId;
+    return role.name !== UserRole.ADMIN && (
+      actorRole === UserRole.ADMIN ||
+      [UserRole.EMPLEADO, UserRole.GERENTE, UserRole.CONTADOR].includes(role.name as UserRole) ||
+      role.id === currentRoleId
+    );
   }
 
   private preventManagerAdminChange(actorRole: string, targetRole: string | null): void {
-    if (actorRole === UserRole.GERENTE && targetRole === UserRole.ADMIN) {
-      throw new HttpError(403, 'Un gerente no puede modificar ni eliminar usuarios ADMIN.');
+    if (actorRole !== UserRole.ADMIN && targetRole === UserRole.ADMIN) {
+      throw new HttpError(403, 'Solo un administrador puede modificar o eliminar usuarios ADMIN.');
     }
   }
 
   private validateCustomRoleName(roleName: string): void {
-    if ([UserRole.ADMIN, UserRole.EMPLEADO, UserRole.GERENTE, UserRole.CONTADOR].includes(roleName as UserRole)) {
-      throw new HttpError(400, 'Ese nombre está reservado para los roles base del sistema.');
+    if (roleName === UserRole.ADMIN) {
+      throw new HttpError(400, 'El nombre ADMIN está reservado para el administrador.');
     }
   }
 

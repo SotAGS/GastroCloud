@@ -33,7 +33,7 @@ npm install
 
 ### 3. Configurar la base de datos (Opcional)
 
-La aplicación crea automáticamente la base de datos y las tablas, pero si prefieres hacerlo manualmente:
+La base de datos debe existir antes de iniciar la aplicación. En desarrollo, la aplicación crea las tablas que faltan:
 
 1. Abre PostgreSQL con pgAdmin o desde la terminal:
    ```bash
@@ -87,7 +87,7 @@ psql -h localhost -U postgres -d gastrocloud -f scripts\migrations\001_tenant_sc
 
 La migración conserva los datos y asigna empresa/sucursal a los registros históricos cuando puede inferir un único propietario. Los productos y categorías ahora son propios de una sucursal; el precio de venta también pertenece al producto local. El stock inicial parte de cero por defecto; si se carga o corrige una cantidad desde el catálogo, queda registrado un movimiento de ajuste. Los registros históricos cuya sucursal no puede inferirse de forma inequívoca quedan con `local_id` vacío para revisión y no aparecen en los catálogos de sucursal. No los reasignes automáticamente: contrasta compras, ventas y movimientos antes de resolverlos.
 
-Al iniciar la aplicación se crean los roles GERENTE y CONTADOR para cada empresa existente y para las empresas registradas después. GERENTE puede administrar catálogo, usuarios y consultar reportes de su empresa; CONTADOR solo tiene acceso a reportes. La migración no se ejecuta automáticamente ni debe correrse sin verificar el respaldo y la base de destino.
+Las empresas nuevas reciben roles iniciales EMPLEADO, GERENTE y CONTADOR. Sus permisos pueden personalizarse sin afectar a otras empresas; el rol ADMIN permanece protegido. La migración no se ejecuta automáticamente ni debe correrse sin verificar el respaldo y la base de destino.
 
 ### Acceso de soporte GastroCloud
 
@@ -136,6 +136,25 @@ La demostración de **Mi plan** está disponible únicamente en desarrollo y usa
 4. Después de completar el checkout de prueba, vuelve manualmente a GastroCloud, actualiza **Mi plan** y pulsa **Verificar pago**. Mercado Pago no admite `localhost` como URL de retorno automático.
 
 Solo se acepta un pago de prueba aprobado, de $1 ARS, de la empresa y preferencia correspondientes; el mismo pago no puede acreditarse dos veces. Premium dura 30 días y vuelve a Freemium al vencer o si el estado de la suscripción deja de estar activo. No hay renovación automática ni integración de pagos reales. Los Premium existentes sin fecha de vencimiento se conservan sin vencimiento.
+
+### Roles personalizables: migración obligatoria
+
+Para una base existente, aplica `scripts\migrations\004_company_roles.sql` **antes de iniciar esta versión**. La sincronización de desarrollo no modifica tablas existentes y la migración no se ejecuta automáticamente. Una instalación nueva con una base vacía no necesita esta migración.
+
+La migración conserva usuarios y permisos al reemplazar el rol EMPLEADO compartido por un rol independiente de cada empresa. ADMIN sigue protegido; los demás roles de cada empresa pueden modificarse o eliminarse si no tienen usuarios asociados. El alcance por empresa o sucursal de cada rol existente se conserva al cambiarle el nombre. La gestión de roles sigue sujeta al plan; el soporte de GastroCloud continúa siendo de solo lectura.
+
+1. Detén la aplicación y realiza un respaldo verificable de la base. En Render Free no hay backups automáticos; usa `pg_dump` con la conexión externa y guarda el archivo en un lugar seguro.
+2. Desde la raíz del proyecto, ejecuta la migración contra la base correcta. Por ejemplo, en Windows con PostgreSQL instalado:
+
+   ```powershell
+   $env:PGSSLMODE = "require"
+   psql -h <host-externo> -p 5432 -U <usuario> -d <base> -W -v ON_ERROR_STOP=1 -f scripts\migrations\004_company_roles.sql
+   ```
+
+   `psql` solicitará la contraseña. Para una base local sin TLS, omite la primera línea y usa el host local correspondiente. Nunca compartas las credenciales.
+3. Si la migración informa un conflicto, no inicies la nueva versión: revisa el error y los datos. Tras completarla, despliega la nueva versión y vuelve a habilitar la aplicación.
+
+La migración se registra para no volver a crear roles si se ejecuta de nuevo. Los permisos y asignaciones se actualizan en las sesiones activas en la siguiente solicitud.
 
 ## Ejecutar la Aplicación
 
@@ -217,8 +236,8 @@ src/
 
 ## Notas Importantes
 
-- La aplicación sincroniza automáticamente los modelos con la base de datos al iniciar
-- Si eliminas la BD, la próxima vez que inicies la app la recreará automáticamente
+- En desarrollo, la aplicación crea las tablas faltantes al iniciar; no actualiza estructuras existentes.
+- La base de datos debe crearse previamente y las migraciones para bases existentes se aplican manualmente.
 - Los datos de demostración se insertan en la primera ejecución
 
 ## Para Compañeros

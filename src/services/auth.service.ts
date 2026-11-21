@@ -30,7 +30,8 @@ export class AuthService {
     const isBaseRole = user.role?.companyId === null && [UserRole.ADMIN, UserRole.EMPLEADO].includes(user.role.name as UserRole);
     if (!companyId || !localId || !user.company?.isActive || !user.local?.isActive ||
         user.local.companyId !== companyId || !user.role ||
-        (!isBaseRole && user.role.companyId !== companyId)) {
+        (!isBaseRole && user.role.companyId !== companyId) ||
+        (user.role.name === UserRole.ADMIN && user.role.companyId !== null)) {
       throw new HttpError(403, 'La cuenta no tiene una asignación válida de empresa, sucursal y rol.');
     }
 
@@ -52,6 +53,7 @@ export class AuthService {
       fullName: user.fullName,
       role: user.role?.name ?? 'EMPLEADO',
       permissions,
+      companyWideAccess: user.role.companyWideAccess,
       companyId,
       localId,
       subscriptionPlan: plan,

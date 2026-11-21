@@ -18,6 +18,9 @@ export class Role extends Model {
   @Column({ type: DataType.STRING(150), allowNull: true })
   declare description: string | null;
 
+  @Column({ type: DataType.BOOLEAN, allowNull: false, defaultValue: false })
+  declare companyWideAccess: boolean;
+
   @HasMany(() => User)
   declare users: User[];
 

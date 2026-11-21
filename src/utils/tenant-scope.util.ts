@@ -11,13 +11,14 @@ export function getTenantScope(user?: AuthUser | null): TenantScope {
     throw new HttpError(403, 'La cuenta no está asociada a una empresa.');
   }
 
-  const companyWideRoles = ['ADMIN', 'GERENTE', 'CONTADOR'];
-  if (!companyWideRoles.includes(user.role) && !user.localId) {
+  const companyWide = user.role === 'ADMIN' ||
+    (user.companyWideAccess ?? ['GERENTE', 'CONTADOR'].includes(user.role));
+  if (!companyWide && !user.localId) {
     throw new HttpError(403, 'La cuenta no está asociada a una sucursal.');
   }
 
   return {
     companyId: user.companyId,
-    localId: companyWideRoles.includes(user.role) ? null : user.localId!,
+    localId: companyWide ? null : user.localId!,
   };
 }

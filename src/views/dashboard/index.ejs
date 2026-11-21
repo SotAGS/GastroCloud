@@ -12,26 +12,26 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character
     </section>
 
     <section class="dashboard-grid mb-3">
-      <article class="stat-card">
+      ${canNavigate('ventas:view') ? `<article class="stat-card">
         <h3>Ventas</h3>
         <p>Registra ventas y mantiene actualizado el stock de tu sucursal.</p>
         <a href="/ventas" class="btn btn-sm btn-outline-light">Ir a ventas</a>
-      </article>
-      <article class="stat-card">
+      </article>` : ''}
+      ${(supportMode || user?.subscriptionPlan === 'PREMIUM') && canNavigate('compras:view') ? `<article class="stat-card">
         <h3>Compras</h3>
         <p>Visualiza ordenes y su estado en tiempo real.</p>
         <a href="/compras" class="btn btn-sm btn-outline-light">Ir a compras</a>
-      </article>
-      <article class="stat-card">
+      </article>` : ''}
+      ${canNavigate('stock:view') ? `<article class="stat-card">
         <h3>Stock</h3>
         <p>Consulta niveles actuales y ultimos movimientos.</p>
         <a href="/stock" class="btn btn-sm btn-outline-light">Ir a stock</a>
-      </article>
-      <article class="stat-card">
+      </article>` : ''}
+      ${(supportMode || user?.subscriptionPlan === 'PREMIUM' || user?.role === 'ADMIN') && canNavigate('seguridad:view') ? `<article class="stat-card">
         <h3>Seguridad</h3>
-        <p>${user?.role === 'ADMIN' ? 'Gestiona roles y permisos de usuarios.' : 'Acceso solo para administradores.'}</p>
-        ${user?.role === 'ADMIN' ? '<a href="/seguridad/usuarios" class="btn btn-sm btn-outline-light">Gestionar roles</a>' : ''}
-      </article>
+        <p>Consulta y gestiona la seguridad de tu empresa.</p>
+        <a href="/seguridad/usuarios" class="btn btn-sm btn-outline-light">Ir a seguridad</a>
+      </article>` : ''}
     </section>
 
     <section class="panel-card">
