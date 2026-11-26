@@ -24,7 +24,7 @@ body {
 
 .app-grid {
   display: grid;
-  grid-template-columns: 260px 1fr;
+  grid-template-columns: 260px minmax(0, 1fr);
   min-height: 100vh;
 }
 
@@ -91,6 +91,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 16px;
   margin-bottom: 22px;
 }
 
@@ -111,6 +112,14 @@ body {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.09);
   margin-right: 8px;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .dashboard-grid {
@@ -218,12 +227,133 @@ body {
 
 @media (max-width: 992px) {
   .app-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .sidebar {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 16px;
+    padding: 14px 18px;
     border-right: none;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .brand-block {
+    margin-bottom: 0;
+  }
+
+  .menu-nav {
+    min-width: 0;
+    flex-direction: row;
+    gap: 4px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+  }
+
+  .menu-nav a {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .content-panel,
+  .content-main,
+  .panel-card,
+  .stat-card {
+    min-width: 0;
+  }
+
+  .topbar-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 575.98px) {
+  .sidebar {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .brand-block {
+    gap: 10px;
+  }
+
+  .brand-mark {
+    width: 38px;
+    height: 38px;
+  }
+
+  .menu-nav a {
+    padding: 8px 10px;
+  }
+
+  .content-panel {
+    padding: 14px 12px 20px;
+  }
+
+  .topbar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .topbar-title {
+    font-size: 1.3rem;
+  }
+
+  .topbar-actions {
+    justify-content: flex-start;
+  }
+
+  .topbar-actions form {
+    max-width: 100%;
+  }
+
+  .user-chip {
+    max-width: 100%;
+    margin-right: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .stat-card,
+  .panel-card {
+    padding: 14px;
+    border-radius: 16px;
+  }
+
+  .panel-card > .d-flex.justify-content-between,
+  .panel-card > .d-flex.align-items-center.justify-content-between {
+    align-items: flex-start !important;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .table-responsive {
+    font-size: 0.9rem;
+  }
+
+  .table-responsive .table {
+    min-width: 560px;
+  }
+
+  .login-card,
+  .error-card {
+    padding: 20px;
+  }
+
+  .ai-fab {
+    right: 16px;
+    bottom: 16px;
+    width: 54px;
+    height: 54px;
   }
 }
 
